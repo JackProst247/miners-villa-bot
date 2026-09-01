@@ -3,3 +3,4 @@ uvicorn
 requests
 langchain-openai
 python-dotenv
+langchain-google-genai
