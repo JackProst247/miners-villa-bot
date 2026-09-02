@@ -2,7 +2,7 @@ import os
 import requests
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 app = FastAPI()
 
@@ -10,6 +10,9 @@ app = FastAPI()
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Ботын зан төлөв, үүрэг тодорхойлох промпт
+SYSTEM_PROMPT = "Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
 
 # Google Gemini загварыг тохируулах
 llm = ChatGoogleGenerativeAI(
@@ -28,6 +31,12 @@ def send_fb_message(recipient_id: str, text: str):
     
     try:
         res = requests.post(url, json=payload, headers=headers)
+        
+        # --- ШИНЭЭР НЭМСЭН ЛОГ ХЭСЭГ ---
+        print(f"FB Send API Status Code: {res.status_code}")
+        print(f"FB Send API Response Body: {res.text}")
+        # -----------------------------
+        
         res.raise_for_status()
     except Exception as e:
         print(f"Error sending message to Facebook: {e}")
@@ -35,9 +44,14 @@ def send_fb_message(recipient_id: str, text: str):
 def process_ai_response(sender_id: str, user_text: str):
     """Background Task: Gemini-ээс хариу аваад Facebook руу илгээх"""
     try:
-        # Gemini AI-аас хариу авах
-        response = llm.invoke([HumanMessage(content=user_text)])
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=user_text)
+        ]
+        response = llm.invoke(messages)
         ai_text = response.content
+        
+        print(f"Generated AI Response: {ai_text}") # AI-ийн бэлтгэсэн текст
         
         # Facebook Messenger рүү хариу илгээх
         send_fb_message(sender_id, ai_text)
@@ -71,7 +85,7 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
                     user_text = messaging_event["message"].get("text", "")
 
                     if user_text:
-                        # AI хариуг арын горимд боловсруулж, Webhook Timeout-аас сэргийлнэ
+                        print(f"Received message from {sender_id}: {user_text}")
                         background_tasks.add_task(process_ai_response, sender_id, user_text)
 
         return Response(content="EVENT_RECEIVED", status_code=200)
@@ -81,8 +95,3 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 @app.get("/")
 async def root():
     return {"status": "Bot server is running successfully with Google Gemini!"}
-# SYSTEM_PROMPT хувьсагчийг функцынхээ дээр эсвэл эхэнд нь зарлаж өгнө
-SYSTEM_PROMPT = "Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
-
-# Жишээ нь Gemini код дотор чинь SYSTEM_PROMPT ашиглагдаж байгаа бол одоо алдаа гарахгүй
-
