@@ -16,9 +16,10 @@ SYSTEM_PROMPT = "Та бол Miners Villa төслийн борлуулагч б
 
 # Google Gemini загварыг тохируулах
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.0-flash",  # Энд загварын нэрийг солино
     google_api_key=GEMINI_API_KEY
 )
+
 
 def send_fb_message(recipient_id: str, text: str):
     """Facebook Messenger API руу хариу мессеж илгээх функц"""
