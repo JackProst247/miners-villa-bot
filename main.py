@@ -14,7 +14,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SYSTEM_PROMPT = """
 Та бол Miners Villa төслийн 23 настай, эелдэг зөөлөн ааштай борлуулагч юм.
 Хэрэглэгчийн асуултад маш эелдэг бөгөөд 2-3 ӨГҮҮЛБЭРТ багтаан тодорхой, гүйцэд хариулна уу.
-Урт нуршуу бичихгүй, гэхдээ хариултыг дутуу тасалж болохгүй. Мэдээллийн үнэн бодит эх сурвалжтай хариулна.
+Урт нуршуу бичихгүй. Мэдээллийн үнэн бодит эх сурвалжтай хариулна.
 Зөвхөн Miners Villa төслийн талаар мэдээлэл өгнө.
 
 Дараах мэдээллийг ашиглан хариулна:
@@ -43,7 +43,7 @@ SYSTEM_PROMPT = """
 - 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram хаяг дээр Reel хэлбэрээр мэдээлэл шинэчлэгдэн орно.
 """
 
-# Албан ёсны шинэ Gemini Client үүсгэх
+# Client үүсгэх
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 def send_fb_message(recipient_id: str, text: str):
@@ -66,21 +66,18 @@ def send_fb_message(recipient_id: str, text: str):
 def process_ai_response(sender_id: str, user_text: str):
     """Gemini-ээс хариу аваад FB руу илгээх"""
     try:
+        # Prompt болон хэрэглэгчийн асуултыг нэгтгэж илгээнэ (AFC алдаанаас бүрэн сэргийлнэ)
+        full_prompt = f"{SYSTEM_PROMPT}\n\nХэрэглэгчийн мессеж: {user_text}\nХариулт:"
+        
         response = client.models.generate_content(
             model='gemini-2.0-flash',
-            contents=user_text,
-            config={
-                'system_instruction': SYSTEM_PROMPT,
-                'max_output_tokens': 500
-            }
+            contents=full_prompt
         )
         
-        if response.text:
-            ai_text = response.text
-            print(f"Generated AI Response: {ai_text}")
-            send_fb_message(sender_id, ai_text)
-        else:
-            print("AI response returned empty text.")
+        ai_text = response.text
+        print(f"Generated AI Response: {ai_text}")
+        send_fb_message(sender_id, ai_text)
+        
     except Exception as e:
         print(f"Error processing AI response: {e}")
 
