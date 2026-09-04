@@ -74,10 +74,13 @@ def process_ai_response(sender_id: str, user_text: str):
                 'max_output_tokens': 500
             }
         )
-        ai_text = response.text
         
-        print(f"Generated AI Response: {ai_text}")
-        send_fb_message(sender_id, ai_text)
+        if response.text:
+            ai_text = response.text
+            print(f"Generated AI Response: {ai_text}")
+            send_fb_message(sender_id, ai_text)
+        else:
+            print("AI response returned empty text.")
     except Exception as e:
         print(f"Error processing AI response: {e}")
 
