@@ -68,7 +68,7 @@ def process_ai_response(sender_id: str, user_text: str):
     """Gemini-ээс хариу аваад FB руу илгээх"""
     try:
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-3.6-flash',
             contents=user_text,
             config={
                 'system_instruction': SYSTEM_PROMPT,
