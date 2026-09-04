@@ -14,9 +14,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Ботын зан төлөв, үүрэг тодорхойлох промпт
 SYSTEM_PROMPT = "Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
 
-# Google Gemini загварыг тохируулах
+# Google Gemini загварыг шинэчилсэн Хувилбар дээр тохируулах
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",  # Энд загварын нэрийг солино
+    model="gemini-1.5-flash",
     google_api_key=GEMINI_API_KEY
 )
 
@@ -32,12 +32,8 @@ def send_fb_message(recipient_id: str, text: str):
     
     try:
         res = requests.post(url, json=payload, headers=headers)
-        
-        # --- ШИНЭЭР НЭМСЭН ЛОГ ХЭСЭГ ---
         print(f"FB Send API Status Code: {res.status_code}")
         print(f"FB Send API Response Body: {res.text}")
-        # -----------------------------
-        
         res.raise_for_status()
     except Exception as e:
         print(f"Error sending message to Facebook: {e}")
@@ -50,9 +46,9 @@ def process_ai_response(sender_id: str, user_text: str):
             HumanMessage(content=user_text)
         ]
         response = llm.invoke(messages)
-        ai_text = response.content
+        ai_text = str(response.content)
         
-        print(f"Generated AI Response: {ai_text}") # AI-ийн бэлтгэсэн текст
+        print(f"Generated AI Response: {ai_text}")
         
         # Facebook Messenger рүү хариу илгээх
         send_fb_message(sender_id, ai_text)
@@ -80,7 +76,6 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     if data.get("object") == "page":
         for entry in data.get("entry", []):
             for messaging_event in entry.get("messaging", []):
-                # Хэрэглэгчийн бичсэн шинэ мессеж мөн эсэхийг шалгах
                 if messaging_event.get("message") and not messaging_event["message"].get("is_echo"):
                     sender_id = messaging_event["sender"]["id"]
                     user_text = messaging_event["message"].get("text", "")
