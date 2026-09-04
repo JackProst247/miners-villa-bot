@@ -34,7 +34,7 @@ def process_ai_response(sender_id: str, user_text: str):
     """Gemini-ээс хариу аваад FB руу илгээх"""
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',  # <-- Энд gemini-2.5-flash-ийг gemini-1.5-flash болгож засна
+            model='gemini-2.5-flash',
             contents=user_text,
             config={
                 'system_instruction': "Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
