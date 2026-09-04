@@ -1,7 +1,7 @@
 import os
 import requests
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
-import google.generativeai as genai
+from google import genai
 
 app = FastAPI()
 
@@ -10,12 +10,8 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Gemini API тохируулах
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction="Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
-)
+# Албан ёсны шинэ Gemini Client үүсгэх
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def send_fb_message(recipient_id: str, text: str):
     """Facebook Messenger API руу хариу мессеж илгээх"""
@@ -37,7 +33,13 @@ def send_fb_message(recipient_id: str, text: str):
 def process_ai_response(sender_id: str, user_text: str):
     """Gemini-ээс хариу аваад FB руу илгээх"""
     try:
-        response = model.generate_content(user_text)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=user_text,
+            config={
+                'system_instruction': "Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
+            }
+        )
         ai_text = response.text
         
         print(f"Generated AI Response: {ai_text}")

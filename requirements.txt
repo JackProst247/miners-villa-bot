@@ -4,4 +4,7 @@ requests
 langchain-openai
 python-dotenv
 langchain-google-genai
-google-generativeai
+fastapi
+uvicorn
+requests
+google-genai
