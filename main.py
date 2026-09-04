@@ -2,6 +2,7 @@ import os
 import requests
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from google import genai
+from google.genai import types
 
 app = FastAPI()
 
@@ -9,6 +10,13 @@ app = FastAPI()
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Ботын зан төлөв: Маш товч бөгөөд тодорхой хариулах тушаал
+SYSTEM_PROMPT = (
+    "Та бол Miners Villa төслийн борлуулагч. "
+    "Хэрэглэгчийн асуултад маш эелдэг бөгөөд ДЭЭД ТАЛ НЬ 1-2 ӨГҮҮЛБЭРТ багтаан товч тодорхой хариулна уу. "
+    "Илүү дутуу урт тайлбар, нуршуу зүйл бичиж болохгүй."
+)
 
 # Албан ёсны шинэ Gemini Client үүсгэх
 client = genai.Client(api_key=GEMINI_API_KEY)
@@ -33,12 +41,16 @@ def send_fb_message(recipient_id: str, text: str):
 def process_ai_response(sender_id: str, user_text: str):
     """Gemini-ээс хариу аваад FB руу илгээх"""
     try:
+        # Хариултын уртыг чанга хязгаарлах болон системийн тушаал тохируулах
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            max_output_tokens=100  # Хариултын текстыг урт гарахаас сэргийлж 100 токеноор хязгаарлав
+        )
+        
         response = client.models.generate_content(
-            model='gemini-3.6-flash',  # <-- Энд gemini-3.6-flash гэж солино
+            model='gemini-2.0-flash',
             contents=user_text,
-            config={
-                'system_instruction': "Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
-            }
+            config=config
         )
         ai_text = response.text
         
