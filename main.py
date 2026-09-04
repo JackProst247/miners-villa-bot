@@ -1,28 +1,24 @@
 import os
 import requests
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage
+import google.generativeai as genai
 
 app = FastAPI()
 
-# Орчны хувьсагчуудыг унших
+# Орчны хувьсагчууд
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Ботын зан төлөв, үүрэг тодорхойлох промпт
-SYSTEM_PROMPT = "Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
-
-# Google Gemini загварыг шинэчилсэн Хувилбар дээр тохируулах
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
-    google_api_key=GEMINI_API_KEY
+# Gemini API тохируулах
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    system_instruction="Та бол Miners Villa төслийн борлуулагч бөгөөд төслийн танилцуулга болон мэдээллийг эелдэг бөгөөд товч тодорхой хариулах үүрэгтэй юм."
 )
 
-
 def send_fb_message(recipient_id: str, text: str):
-    """Facebook Messenger API руу хариу мессеж илгээх функц"""
+    """Facebook Messenger API руу хариу мессеж илгээх"""
     url = f"https://graph.facebook.com/v20.0/me/messages?access_token={META_PAGE_ACCESS_TOKEN}"
     payload = {
         "recipient": {"id": recipient_id},
@@ -39,25 +35,18 @@ def send_fb_message(recipient_id: str, text: str):
         print(f"Error sending message to Facebook: {e}")
 
 def process_ai_response(sender_id: str, user_text: str):
-    """Background Task: Gemini-ээс хариу аваад Facebook руу илгээх"""
+    """Gemini-ээс хариу аваад FB руу илгээх"""
     try:
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=user_text)
-        ]
-        response = llm.invoke(messages)
-        ai_text = str(response.content)
+        response = model.generate_content(user_text)
+        ai_text = response.text
         
         print(f"Generated AI Response: {ai_text}")
-        
-        # Facebook Messenger рүү хариу илгээх
         send_fb_message(sender_id, ai_text)
     except Exception as e:
         print(f"Error processing AI response: {e}")
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
-    """Facebook Webhook баталгаажуулах GET хүсэлт"""
     params = request.query_params
     mode = params.get("hub.mode")
     token = params.get("hub.verify_token")
@@ -70,7 +59,6 @@ async def verify_webhook(request: Request):
 
 @app.post("/webhook")
 async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
-    """Facebook-ээс ирсэн мессежийг хүлээн авах POST хүсэлт"""
     data = await request.json()
 
     if data.get("object") == "page":
@@ -90,4 +78,4 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def root():
-    return {"status": "Bot server is running successfully with Google Gemini!"}
+    return {"status": "Bot server is running successfully!"}
