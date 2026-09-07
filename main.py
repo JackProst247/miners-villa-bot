@@ -70,9 +70,9 @@ def process_ai_response(sender_id: str, user_text: str):
         full_prompt = f"{SYSTEM_PROMPT}\n\nХэрэглэгчийн мессеж: {user_text}\nХариулт:"
         
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=full_prompt
-        )
+    model='gemini-3.6-flash',  # <-- Энд 3.6-flash гэж заавал засаж хадгална
+    contents=full_prompt
+)
         
         ai_text = response.text
         print(f"Generated AI Response: {ai_text}")
