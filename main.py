@@ -26,7 +26,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # IMAGE_BASE_URL=https://xxxx.trycloudflare.com/photo
 IMAGE_BASE_URL = os.getenv("IMAGE_BASE_URL", "").rstrip("/")
 
-# Gemini model. Google-ийн одоогийн жишээнүүдтэй нийцүүлж env-ээр сольж болдог.
+# Gemini model
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
 
 # =========================================================
@@ -38,8 +38,6 @@ BASE_DIR = Path(__file__).resolve().parent
 PHOTO_FOLDER = BASE_DIR / "photo"
 PHOTO_FOLDER.mkdir(parents=True, exist_ok=True)
 
-# D:\Miners Villa bot\photo\ файлуудыг
-# https://PUBLIC_URL/photo/filename хэлбэрээр нээх боломжтой болгоно.
 app.mount(
     "/photo",
     StaticFiles(directory=str(PHOTO_FOLDER)),
@@ -48,10 +46,9 @@ app.mount(
 
 # =========================================================
 # IMAGE LIBRARY
-# Зургийн жинхэнэ filename-уудыг screenshot дээрхтэй тааруулсан.
-# Файлын нэрийг дахин солих шаардлагагүй.
 # =========================================================
 IMAGE_LIBRARY = {
+
     # Ерөнхий төлөвлөгөө / орчин
     "GENERAL_PLAN": "general_plan",
     "GREEN_GARDEN": "Green_garden",
@@ -67,7 +64,8 @@ IMAGE_LIBRARY = {
     # Мульт хаус
     "MULT": "mult",
     "MULT_PARKING_SPACE": "mult_parking_space",
-"MULT_PARKING_SPACE_1": "mult_parking_space_1",
+    "MULT_PARKING_SPACE_1": "mult_parking_space_1",
+
     "MULT_100": "mult_100",
     "MULT_116": "mult_116",
     "MULT_120": "mult_120",
@@ -81,10 +79,6 @@ IMAGE_LIBRARY = {
     "MULT_192": "mult_192",
     "MULT_198": "mult_198",
 
-    # Мульт хаус зогсоолын зураг
-    # Файлын нэр Windows Explorer дээр таслагдаж харагдаж байгаа тул
-    # яг бүтэн нэрийг дараа нь нягталж болно.
-
     # Таун хаус
     "TOWNHOUSE_212": "townhouse_212",
     "TOWNHOUSE_212_1": "townhouse_212_1",
@@ -92,14 +86,11 @@ IMAGE_LIBRARY = {
     "TOWNHOUSE_266_1": "townhouse_266_1",
 }
 
-
 # Gemini зөвхөн эдгээр KEY-ээс сонгоно.
 IMAGE_KEYS = list(IMAGE_LIBRARY.keys())
 
 # =========================================================
 # SIMPLE CONVERSATION MEMORY
-# "267?" гэх мэт богино follow-up асуултад тусална.
-# Server restart хийхэд memory цэвэрлэгдэнэ.
 # =========================================================
 CONVERSATIONS: Dict[str, List[Dict[str, str]]] = {}
 MAX_HISTORY = 8
@@ -154,13 +145,14 @@ SYSTEM_PROMPT = """
 - H — 198.52 м²
 - I — 189.52 м²
 
-Мульт хаус НЭГДСЭН ДУЛААН ЗОГСООЛ:
+МУЛЬТ ХАУС НЭГДСЭН ДУЛААН ЗОГСООЛ:
 - Мульт хаусын Б1 давхарт нэгдсэн дулаан зогсоол байрлана.
 - Зогсоолын үнэ: 50,000,000 ₮.
 - "дулаан зогсоол", "нэгдсэн зогсоол", "Б1 зогсоол", "машины зогсоол" гэж асуувал энэ мэдээллийг ашигла.
 - Зогсоолын план зураг хүсвэл: MULT_PARKING_SPACE
 - Зогсоолын харагдах байдлын зураг хүсвэл: MULT_PARKING_SPACE_1
-- Зогсоолын ерөнхий зураг хүсвэл: MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
+- Зогсоолын ерөнхий зураг хүсвэл:
+  MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
 - Зогсоолын үнэ, байршил, зориулалтын талаар prompt-д байхгүй нэмэлт мэдээлэл бүү зохио.
 
 БАЙРШИЛ:
@@ -177,13 +169,17 @@ SYSTEM_PROMPT = """
 - Гэрээн дээрх Хаан банкны данс руу шилжүүлнэ.
 - Гүйлгээний утгад гэрээний дугаар, байрны тоот, овог нэр, регистр зэргийг бичнэ.
 - Дансны дугаарыг prompt-д өгөөгүй тул зохиож болохгүй.
-- Данс асуувал: "Дансны дугаар нь гэрээнд заасан Хаан банкны данс байна. Тодруулах шаардлагатай бол 9430-7017 дугаарт холбогдоорой 😊"
+- Данс асуувал:
+  "Дансны дугаар нь гэрээнд заасан Хаан банкны данс байна.
+  Тодруулах шаардлагатай бол 9430-7017 дугаарт холбогдоорой 😊"
 
 БАРИЛГЫН ЯВЦ:
-- 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр Reel хэлбэрээр шинэчилж хүргэдэг.
+- 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр
+  Reel хэлбэрээр шинэчилж хүргэдэг.
 
 МЭДЭЭЛЭЛ БАЙХГҮЙ БОЛ:
-"Энэ мэдээллийг одоогоор надад өгөөгүй байна. Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
+"Энэ мэдээллийг одоогоор надад өгөөгүй байна.
+Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
 гэж хариул.
 
 ХҮНТЭЙ ЯРИХ ХҮСЭЛТ:
@@ -191,7 +187,8 @@ SYSTEM_PROMPT = """
 
 ҮНЭ:
 - "Үнэ хэд вэ?" гэвэл м² үнэ 5,500,000–5,800,000 ₮ гэж хэл.
-- Мэдээллийн санд байхгүй м²-ийн нийт үнийг өөрөө тооцоолж баталгаатай үнэ мэтээр хэлэхгүй.
+- Мэдээллийн санд байхгүй м²-ийн нийт үнийг өөрөө тооцоолж
+  баталгаатай үнэ мэтээр хэлэхгүй.
 
 МЭДЭЭЛЭЛ ЗОХИОХГҮЙ:
 Үнэ, талбай, байрны тоо, хугацаа, хөнгөлөлт, урамшуулал,
@@ -230,9 +227,17 @@ IMAGE KEY-ҮҮД:
 - "спортын талбайн төлөвлөгөө" -> SPORTS_AREA_PLAN
 - "мульт хаусын ерөнхий зураг" -> MULT
 - "таун хаусын зураг" -> TOWNHOUSE_266 болон TOWNHOUSE_212 хоёуланг явуулж болно.
-- "мульт хаусын зураг" гэж ерөнхий асуулт бол MULT_126, MULT_125 зэрэг 2-3 тохирох загварын key сонгож болно.
-- "план", "төлөвлөлт" гэж зураг хүсвэл тохирох зураг байгаа үед image_key сонго.
+- "мульт хаусын зураг" гэж ерөнхий асуулт бол
+  MULT_126, MULT_125 зэрэг 2-3 тохирох загварын key сонгож болно.
+- "план", "төлөвлөлт" гэж зураг хүсвэл тохирох зураг байгаа үед
+  image_key сонго.
 - Зөвхөн зураг байхгүй төрлийн талаар image key зохиож болохгүй.
+
+ЗОГСООЛЫН ЗУРГИЙН ДҮРЭМ:
+- "зогсоолын план" -> MULT_PARKING_SPACE
+- "зогсоолын харагдах байдал" -> MULT_PARKING_SPACE_1
+- "зогсоолын зураг" -> MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
+- "дулаан зогсоолын зураг" -> MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
 
 ЧУХАЛ:
 - Хэрэглэгч зураг хүсээгүй бол image_keys хоосон байна.
@@ -258,7 +263,10 @@ def check_environment():
         print("Messenger зураг авахын тулд PUBLIC HTTPS URL шаардлагатай.")
 
     if missing:
-        print("WARNING: .env дотор дутуу хувьсагч:", ", ".join(missing))
+        print(
+            "WARNING: .env дотор дутуу хувьсагч:",
+            ", ".join(missing)
+        )
 
 
 check_environment()
@@ -269,10 +277,12 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 # HELPERS
 # =========================================================
 def resolve_photo_file(stem: str) -> Path | None:
-    """photo хавтаснаас өгсөн filename stem-тэй файлыг extension-оос үл хамааран олно."""
+    """photo хавтаснаас filename stem-тэй файлыг extension-оос үл хамааран олно."""
     exact_matches = list(PHOTO_FOLDER.glob(stem + ".*"))
+
     if exact_matches:
         return exact_matches[0]
+
     return None
 
 
@@ -286,13 +296,19 @@ def get_public_image_url(filename: str) -> str:
 
 def add_to_history(sender_id: str, role: str, text: str):
     history = CONVERSATIONS.setdefault(sender_id, [])
-    history.append({"role": role, "text": text})
+
+    history.append({
+        "role": role,
+        "text": text
+    })
+
     if len(history) > MAX_HISTORY:
         del history[:-MAX_HISTORY]
 
 
 def history_text(sender_id: str) -> str:
     history = CONVERSATIONS.get(sender_id, [])
+
     if not history:
         return "Өмнөх яриа байхгүй."
 
@@ -318,19 +334,26 @@ def send_fb_message(recipient_id: str, text: str):
         return
 
     payload = {
-        "recipient": {"id": recipient_id},
-        "message": {"text": text},
+        "recipient": {
+            "id": recipient_id
+        },
+        "message": {
+            "text": text
+        },
     }
 
     try:
         response = requests.post(
             messenger_url(),
             json=payload,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json"
+            },
             timeout=30,
         )
 
         print("FB TEXT:", response.status_code, response.text)
+
         response.raise_for_status()
 
     except Exception as e:
@@ -343,7 +366,9 @@ def send_fb_image(recipient_id: str, image_url: str):
         return
 
     payload = {
-        "recipient": {"id": recipient_id},
+        "recipient": {
+            "id": recipient_id
+        },
         "message": {
             "attachment": {
                 "type": "image",
@@ -359,11 +384,14 @@ def send_fb_image(recipient_id: str, image_url: str):
         response = requests.post(
             messenger_url(),
             json=payload,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json"
+            },
             timeout=30,
         )
 
         print("FB IMAGE:", response.status_code, response.text)
+
         response.raise_for_status()
 
     except Exception as e:
@@ -378,8 +406,10 @@ def send_images_by_keys(recipient_id: str, image_keys):
     seen = set()
 
     for key in image_keys:
+
         if key in seen:
             continue
+
         seen.add(key)
 
         if key not in IMAGE_LIBRARY:
@@ -387,18 +417,33 @@ def send_images_by_keys(recipient_id: str, image_keys):
             continue
 
         stem = IMAGE_LIBRARY[key]
+
         local_path = resolve_photo_file(stem)
 
         if local_path is None or not local_path.is_file():
-            print("IMAGE FILE NOT FOUND FOR KEY:", key, "STEM:", stem)
+            print(
+                "IMAGE FILE NOT FOUND FOR KEY:",
+                key,
+                "STEM:",
+                stem
+            )
             continue
 
         filename = local_path.name
 
         try:
             public_url = get_public_image_url(filename)
-            print("Sending image:", key, public_url)
-            send_fb_image(recipient_id, public_url)
+
+            print(
+                "Sending image:",
+                key,
+                public_url
+            )
+
+            send_fb_image(
+                recipient_id,
+                public_url
+            )
 
         except Exception as e:
             print("Image send error:", e)
@@ -408,8 +453,11 @@ def send_images_by_keys(recipient_id: str, image_keys):
 # GEMINI
 # =========================================================
 def ask_gemini(sender_id: str, user_text: str):
+
     if not client:
-        raise RuntimeError("GEMINI_API_KEY тохируулаагүй байна.")
+        raise RuntimeError(
+            "GEMINI_API_KEY тохируулаагүй байна."
+        )
 
     prompt = f"""
 {SYSTEM_PROMPT}
@@ -446,7 +494,9 @@ def ask_gemini(sender_id: str, user_text: str):
     last_error = None
 
     for attempt in range(3):
+
         try:
+
             response = client.models.generate_content(
                 model=GEMINI_MODEL,
                 contents=prompt,
@@ -458,33 +508,54 @@ def ask_gemini(sender_id: str, user_text: str):
             )
 
             raw = (response.text or "").strip()
-            print(f"GEMINI RAW (attempt {attempt + 1}):", raw)
+
+            print(
+                f"GEMINI RAW (attempt {attempt + 1}):",
+                raw
+            )
 
             data = json.loads(raw)
 
-            reply = str(data.get("reply", "")).strip()
-            image_keys = data.get("image_keys", [])
+            reply = str(
+                data.get("reply", "")
+            ).strip()
 
-            if not isinstance(image_keys, list):
+            image_keys = data.get(
+                "image_keys",
+                []
+            )
+
+            if not isinstance(
+                image_keys,
+                list
+            ):
                 image_keys = []
 
             valid_keys = [
-                key for key in image_keys
-                if isinstance(key, str) and key in IMAGE_LIBRARY
+                key
+                for key in image_keys
+                if (
+                    isinstance(key, str)
+                    and key in IMAGE_LIBRARY
+                )
             ]
 
             if not reply:
                 reply = (
                     "Энэ мэдээллийг одоогоор надад өгөөгүй байна. "
-                    "Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
+                    "Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас "
+                    "лавлаарай 😊"
                 )
 
             return reply, valid_keys
 
         except Exception as e:
+
             last_error = e
+
             print(
-                f"GEMINI ERROR (attempt {attempt + 1}/3):",
+                f"GEMINI ERROR "
+                f"(attempt {attempt + 1}/3):",
                 repr(e)
             )
 
@@ -493,18 +564,93 @@ def ask_gemini(sender_id: str, user_text: str):
 
     raise last_error
 
+
+# =========================================================
+# PROCESS AI RESPONSE
+# =========================================================
+def process_ai_response(
+    sender_id: str,
+    user_text: str
+):
+    try:
+
+        reply, image_keys = ask_gemini(
+            sender_id,
+            user_text
+        )
+
+        print("AI REPLY:", reply)
+        print("AI IMAGE KEYS:", image_keys)
+
+        # Conversation history
+        add_to_history(
+            sender_id,
+            "user",
+            user_text
+        )
+
+        add_to_history(
+            sender_id,
+            "assistant",
+            reply
+        )
+
+        # Text reply
+        send_fb_message(
+            sender_id,
+            reply
+        )
+
+        # Images
+        send_images_by_keys(
+            sender_id,
+            image_keys
+        )
+
+    except json.JSONDecodeError as e:
+
+        print(
+            "Gemini JSON parse error:",
+            e
+        )
+
+        send_fb_message(
+            sender_id,
+            "Уучлаарай, түр зуурын техникийн алдаа гарлаа. "
+            "Дахин нэг асуугаад үзээрэй 😊"
+        )
+
+    except Exception as e:
+
+        print(
+            "Error processing AI response:",
+            repr(e)
+        )
+
+        send_fb_message(
+            sender_id,
+            "Уучлаарай, түр зуурын техникийн алдаа гарлаа. "
+            "Дахин нэг асуугаад үзээрэй 😊"
+        )
+
+
 # =========================================================
 # META WEBHOOK VERIFICATION
 # =========================================================
 @app.get("/webhook")
-async def verify_webhook(request: Request):
+async def verify_webhook(
+    request: Request
+):
     params = request.query_params
 
     mode = params.get("hub.mode")
     token = params.get("hub.verify_token")
     challenge = params.get("hub.challenge")
 
-    if mode == "subscribe" and token == VERIFY_TOKEN:
+    if (
+        mode == "subscribe"
+        and token == VERIFY_TOKEN
+    ):
         return Response(
             content=challenge or "",
             media_type="text/plain",
@@ -524,25 +670,39 @@ async def handle_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
 ):
+
     try:
+
         data = await request.json()
+
     except Exception:
+
         return Response(
             content="INVALID_JSON",
             status_code=400,
         )
 
     if data.get("object") != "page":
+
         return Response(
             content="NOT_A_PAGE_EVENT",
             status_code=404,
         )
 
-    for entry in data.get("entry", []):
-        for messaging_event in entry.get("messaging", []):
+    for entry in data.get(
+        "entry",
+        []
+    ):
+
+        for messaging_event in entry.get(
+            "messaging",
+            []
+        ):
 
             # Bot өөрийн echo message-ийг дахин боловсруулахгүй.
-            message = messaging_event.get("message")
+            message = messaging_event.get(
+                "message"
+            )
 
             if not message:
                 continue
@@ -550,16 +710,24 @@ async def handle_webhook(
             if message.get("is_echo"):
                 continue
 
-            sender = messaging_event.get("sender", {})
-            sender_id = sender.get("id")
+            sender = messaging_event.get(
+                "sender",
+                {}
+            )
+
+            sender_id = sender.get(
+                "id"
+            )
 
             if not sender_id:
                 continue
 
-            user_text = message.get("text", "").strip()
+            user_text = message.get(
+                "text",
+                ""
+            ).strip()
 
             if not user_text:
-                # Одоогоор зөвхөн text message боловсруулах хувилбар.
                 continue
 
             print("=" * 60)
@@ -584,10 +752,13 @@ async def handle_webhook(
 # =========================================================
 @app.get("/")
 async def root():
+
     return {
         "status": "Miners Villa bot is running",
         "photo_folder": str(PHOTO_FOLDER),
         "image_count": len(IMAGE_LIBRARY),
-        "image_base_url_configured": bool(IMAGE_BASE_URL),
+        "image_base_url_configured": bool(
+            IMAGE_BASE_URL
+        ),
         "gemini_model": GEMINI_MODEL,
     }
