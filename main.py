@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 import requests
 from pathlib import Path
 from urllib.parse import quote
@@ -12,41 +13,72 @@ from fastapi.staticfiles import StaticFiles
 from google import genai
 from google.genai import types
 
+
 # =========================================================
 # .env
 # =========================================================
+
 load_dotenv()
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
-META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+VERIFY_TOKEN = os.getenv(
+    "VERIFY_TOKEN",
+    "miners_villa_secret_123"
+)
+
+META_PAGE_ACCESS_TOKEN = os.getenv(
+    "META_PAGE_ACCESS_TOKEN"
+)
+
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY"
+)
 
 # Messenger зураг авахад ашиглах PUBLIC HTTPS URL.
 # Жишээ:
 # IMAGE_BASE_URL=https://xxxx.trycloudflare.com/photo
-IMAGE_BASE_URL = os.getenv("IMAGE_BASE_URL", "").rstrip("/")
+
+IMAGE_BASE_URL = os.getenv(
+    "IMAGE_BASE_URL",
+    ""
+).rstrip("/")
 
 # Gemini model
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
+GEMINI_MODEL = os.getenv(
+    "GEMINI_MODEL",
+    "gemini-3.7-flash"
+)
+
 
 # =========================================================
 # APP + PHOTO FOLDER
 # =========================================================
-app = FastAPI(title="Miners Villa Messenger Bot")
+
+app = FastAPI(
+    title="Miners Villa Messenger Bot"
+)
 
 BASE_DIR = Path(__file__).resolve().parent
+
 PHOTO_FOLDER = BASE_DIR / "photo"
-PHOTO_FOLDER.mkdir(parents=True, exist_ok=True)
+
+PHOTO_FOLDER.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 app.mount(
     "/photo",
-    StaticFiles(directory=str(PHOTO_FOLDER)),
+    StaticFiles(
+        directory=str(PHOTO_FOLDER)
+    ),
     name="photo",
 )
+
 
 # =========================================================
 # IMAGE LIBRARY
 # =========================================================
+
 IMAGE_LIBRARY = {
 
     # Ерөнхий төлөвлөгөө / орчин
@@ -63,6 +95,7 @@ IMAGE_LIBRARY = {
 
     # Мульт хаус
     "MULT": "mult",
+
     "MULT_PARKING_SPACE": "mult_parking_space",
     "MULT_PARKING_SPACE_1": "mult_parking_space_1",
 
@@ -86,181 +119,201 @@ IMAGE_LIBRARY = {
     "TOWNHOUSE_266_1": "townhouse_266_1",
 }
 
-# Gemini зөвхөн эдгээр KEY-ээс сонгоно.
-IMAGE_KEYS = list(IMAGE_LIBRARY.keys())
+IMAGE_KEYS = list(
+    IMAGE_LIBRARY.keys()
+)
+
 
 # =========================================================
 # SIMPLE CONVERSATION MEMORY
 # =========================================================
-CONVERSATIONS: Dict[str, List[Dict[str, str]]] = {}
+
+CONVERSATIONS: Dict[
+    str,
+    List[Dict[str, str]]
+] = {}
+
 MAX_HISTORY = 8
 
+
 # =========================================================
-# MINERS VILLA SYSTEM PROMPT
+# MINERS VILLA DATA
 # =========================================================
+
+PROJECT_NAME = "Miners Villa"
+
+PRICE_MIN = 5_500_000
+PRICE_MAX = 5_800_000
+
+SALES_PHONE = "9430-7017"
+
+SALES_OFFICE = (
+    "Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, "
+    "төв зам дагуу"
+)
+
+LOCATION_TEXT = (
+    "Баян-Өндөр уулын зүүн энгэрт, "
+    "Бүсийн оношилгооны төвийн ард, "
+    "Медипас эмнэлгийн ард, 30.8 га талбайд"
+)
+
+TOWNHOUSE_SIZES = {
+    "213.33": "213.33 м²",
+    "267.48": "267.48 м²",
+}
+
+MULT_HOUSES = {
+    "A": "126 м²",
+    "B": "125.21 м²",
+    "C": "192.25 м²",
+    "D": "189.64 м²",
+    "F": "136.42 м²",
+    "G": "178.39 м²",
+    "H": "198.52 м²",
+    "I": "189.52 м²",
+}
+
+PAYMENT_TEXT = (
+    "30% урьдчилгаа, 40% явцын төлбөр, "
+    "20% явцын төлбөр, 10% түлхүүр гардуулах үед төлнө."
+)
+
+PARKING_TEXT = (
+    "Мульт хаусын Б1 давхарт нэгдсэн дулаан зогсоол байрлана. "
+    "Зогсоолын үнэ 50,000,000 ₮."
+)
+
+UNKNOWN_TEXT = (
+    "Энэ мэдээллийг одоогоор надад өгөөгүй байна. "
+    "Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
+)
+
+
+# =========================================================
+# SYSTEM PROMPT
+# =========================================================
+
 SYSTEM_PROMPT = """
-ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН 23 НАСТАЙ, ЭЕЛДЭГ,
-ЗӨӨЛӨН, ТУСЧ БОРЛУУЛАГЧ.
+ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН 23 НАСТАЙ,
+ЭЕЛДЭГ, ЗӨӨЛӨН, ТУСЧ БОРЛУУЛАГЧ.
 
 ЗОРИЛГО:
-- Хэрэглэгчид Miners Villa-ийн талаар үнэн зөв мэдээлэл өгөх
-- Асуултад яг тохирсон, богино хариулт өгөх
-- Хэт робот шиг, хэт албан ёсны бичихгүй
-- Хэрэглэгчийг дарамтлахгүйгээр шаардлагатай үед борлуулалтын багтай холбох
 
-ХЭЛ, ӨНГӨ:
-- Монгол хэлээр хариул.
-- Дулаан, эелдэг, хүнтэй ярилцаж байгаа мэт бич.
-- Ихэнх хариулт 1-3 өгүүлбэр байна.
-- Шаардлагатай үед emoji ашиглаж болно.
-- Бүх хариултын төгсгөлд CTA хийх шаардлагагүй.
-- Хэрэглэгч мэндэлбэл мэндэлж хариул.
-- Хэрэглэгчийн асуултыг уртаар давтахгүй.
+* Miners Villa-ийн талаар үнэн зөв мэдээлэл өгөх.
+* Богино, ойлгомжтой, хүнтэй ярилцаж байгаа мэт хариулах.
+* Монгол хэлээр хариулах.
+* Хэрэглэгчийн асуултыг уртаар давтахгүй.
+* Хэт робот шиг бичихгүй.
+* Худал мэдээлэл зохиохгүй.
 
-МЭДЭЭЛЛИЙН ҮНДСЭН САН:
-- Төслийн нэр: Miners Villa
-- М² үнэ: 5,500,000 - 5,800,000 ₮
-- Борлуулалтын утас: 9430-7017
-- Борлуулалтын оффис: Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, төв зам дагуу.
+ҮНДСЭН МЭДЭЭЛЭЛ:
+
+* Төслийн нэр: Miners Villa
+* М² үнэ: 5,500,000 - 5,800,000 ₮
+* Борлуулалтын утас: 9430-7017
+* Борлуулалтын оффис:
+  Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, төв зам дагуу.
 
 ТӨЛБӨРИЙН НӨХЦӨЛ:
-- Урьдчилгаа: 30%
-- Явцын төлбөр: 40%
-- Явцын төлбөр: 20%
-- Түлхүүр гардуулахад: 10%
-- Явцын төлбөрт зөвхөн байрны бартер сонсоно.
-- Машин, газар, бизнесийн бартер зөвшөөрсөн гэж хэлж болохгүй.
+
+* 30% урьдчилгаа
+* 40% явцын төлбөр
+* 20% явцын төлбөр
+* 10% түлхүүр гардуулах үед
+* Явцын төлбөрт зөвхөн байрны бартер сонсоно.
+* Машин, газар, бизнесийн бартер зөвшөөрсөн гэж хэлж болохгүй.
 
 ТАУН ХАУС:
-- 213.33 м²
-- 267.48 м²
+
+* 213.33 м²
+* 267.48 м²
 
 МУЛЬТ ХАУС:
-- A — 126 м²
-- B — 125.21 м²
-- C — 192.25 м²
-- D — 189.64 м²
-- F — 136.42 м²
-- G — 178.39 м²
-- H — 198.52 м²
-- I — 189.52 м²
 
-МУЛЬТ ХАУС НЭГДСЭН ДУЛААН ЗОГСООЛ:
-- Мульт хаусын Б1 давхарт нэгдсэн дулаан зогсоол байрлана.
-- Зогсоолын үнэ: 50,000,000 ₮.
-- "дулаан зогсоол", "нэгдсэн зогсоол", "Б1 зогсоол", "машины зогсоол" гэж асуувал энэ мэдээллийг ашигла.
-- Зогсоолын план зураг хүсвэл: MULT_PARKING_SPACE
-- Зогсоолын харагдах байдлын зураг хүсвэл: MULT_PARKING_SPACE_1
-- Зогсоолын ерөнхий зураг хүсвэл:
-  MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
-- Зогсоолын үнэ, байршил, зориулалтын талаар prompt-д байхгүй нэмэлт мэдээлэл бүү зохио.
+* A — 126 м²
+* B — 125.21 м²
+* C — 192.25 м²
+* D — 189.64 м²
+* F — 136.42 м²
+* G — 178.39 м²
+* H — 198.52 м²
+* I — 189.52 м²
+
+ДУЛААН ЗОГСООЛ:
+
+* Мульт хаусын Б1 давхарт нэгдсэн дулаан зогсоол байрлана.
+* Үнэ: 50,000,000 ₮.
 
 БАЙРШИЛ:
-- Баян-Өндөр уулын зүүн энгэрт
-- Бүсийн оношилгооны төвийн ард
-- Медипас эмнэлгийн ард
-- 30.8 га талбайд.
+
+* Баян-Өндөр уулын зүүн энгэрт
+* Бүсийн оношилгооны төвийн ард
+* Медипас эмнэлгийн ард
+* 30.8 га талбайд.
 
 БАРИЛГЫН АЖИЛ:
-- 2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна.
-- Үүнийг баталгаатай ашиглалтад орох огноо мэтээр хэлж болохгүй.
 
-ТӨЛБӨР ТӨЛӨХ:
-- Гэрээн дээрх Хаан банкны данс руу шилжүүлнэ.
-- Гүйлгээний утгад гэрээний дугаар, байрны тоот, овог нэр, регистр зэргийг бичнэ.
-- Дансны дугаарыг prompt-д өгөөгүй тул зохиож болохгүй.
-- Данс асуувал:
-  "Дансны дугаар нь гэрээнд заасан Хаан банкны данс байна.
-  Тодруулах шаардлагатай бол 9430-7017 дугаарт холбогдоорой 😊"
+* 2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна.
+* Үүнийг баталгаатай ашиглалтад орох огноо мэтээр хэлж болохгүй.
 
 БАРИЛГЫН ЯВЦ:
-- 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр
+
+* 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр
   Reel хэлбэрээр шинэчилж хүргэдэг.
 
-МЭДЭЭЛЭЛ БАЙХГҮЙ БОЛ:
-"Энэ мэдээллийг одоогоор надад өгөөгүй байна.
-Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
-гэж хариул.
+МЭДЭЭЛЭЛ ЗОХИОЖ БОЛОХГҮЙ:
 
-ХҮНТЭЙ ЯРИХ ХҮСЭЛТ:
-"😊 Манай борлуулалтын албатай 9430-7017 дугаараар холбогдоорой."
+* Шинэ үнэ
+* Хөнгөлөлт
+* Урамшуулал
+* Ашиглалтад орох баталгаатай огноо
+* Материал
+* Үйлчилгээ
+* Сургууль
+* Цэцэрлэг
+* Байрны тоо
+* Дансны дугаар
 
-ҮНЭ:
-- "Үнэ хэд вэ?" гэвэл м² үнэ 5,500,000–5,800,000 ₮ гэж хэл.
-- Мэдээллийн санд байхгүй м²-ийн нийт үнийг өөрөө тооцоолж
-  баталгаатай үнэ мэтээр хэлэхгүй.
+зэрэг prompt-д байхгүй мэдээллийг зохиож болохгүй.
 
-МЭДЭЭЛЭЛ ЗОХИОХГҮЙ:
-Үнэ, талбай, байрны тоо, хугацаа, хөнгөлөлт, урамшуулал,
-материал, зогсоол, сургууль, цэцэрлэг, үйлчилгээ болон бусад
-өгөөгүй нөхцөлийг өөрөө зохиож болохгүй.
+ЗУРГИЙН ДҮРЭМ:
 
-ЗУРГИЙН ГОЛ ДҮРЭМ:
-Gemini зураг файлыг өөрөө сонгохгүй.
-Зөвхөн доорх тогтмол IMAGE KEY-үүдээс сонгоно.
-URL, filename, file path зохиож болохгүй.
+Gemini зөвхөн IMAGE KEY буцаана.
 
-IMAGE KEY-ҮҮД:
-""" + "\n".join(f"- {k}" for k in IMAGE_KEYS) + """
+Зөвшөөрөгдсөн IMAGE KEY:
+""" + "\n".join(
+    f"- {k}" for k in IMAGE_KEYS
+) + """
 
-ЗУРГИЙН СОНГОЛТЫН ЖИШЭЭ:
-- "267 м² зураг" / "267 зураг" -> TOWNHOUSE_266
-- "212/213 м² зураг" / "213 зураг" -> TOWNHOUSE_212
-- "126 м² мульт" -> MULT_126
-- "125.21 м² мульт" -> MULT_125
-- "192.25 м² мульт" -> MULT_192
-- "189.64 м² мульт" -> MULT_189_64
-- "136.42 м² мульт" -> MULT_136
-- "178.39 м² мульт" -> MULT_178
-- "198.52 м² мульт" -> MULT_198
-- "126.32 м² мульт" -> MULT_126_32
-- "100.77 м² мульт" -> MULT_100
-- "120.85 м² мульт" -> MULT_120
-- "116 м² мульт" -> MULT_116
-- "ерөнхий төлөвлөгөө" -> GENERAL_PLAN
-- "ногоон байгууламж" / "ногоон цэцэрлэг" -> GREEN_GARDEN
-- "тохижилт" -> LANDSCAPING
-- "амрах талбай" -> RELAXATION_AREA
-- "0-5 насны тоглоомын талбай" -> SPORTS_AREA_0_5
-- "9-13 насны тоглоомын талбай" -> SPORTS_AREA_9_13
-- "13-16 насны тоглоомын талбай" -> SPORTS_AREA_13_16
-- "спортын талбайн төлөвлөгөө" -> SPORTS_AREA_PLAN
-- "мульт хаусын ерөнхий зураг" -> MULT
-- "таун хаусын зураг" -> TOWNHOUSE_266 болон TOWNHOUSE_212 хоёуланг явуулж болно.
-- "мульт хаусын зураг" гэж ерөнхий асуулт бол
-  MULT_126, MULT_125 зэрэг 2-3 тохирох загварын key сонгож болно.
-- "план", "төлөвлөлт" гэж зураг хүсвэл тохирох зураг байгаа үед
-  image_key сонго.
-- Зөвхөн зураг байхгүй төрлийн талаар image key зохиож болохгүй.
+Зураг хүсээгүй үед:
+image_keys = []
 
-ЗОГСООЛЫН ЗУРГИЙН ДҮРЭМ:
-- "зогсоолын план" -> MULT_PARKING_SPACE
-- "зогсоолын харагдах байдал" -> MULT_PARKING_SPACE_1
-- "зогсоолын зураг" -> MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
-- "дулаан зогсоолын зураг" -> MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
-
-ЧУХАЛ:
-- Хэрэглэгч зураг хүсээгүй бол image_keys хоосон байна.
-- Нэг хүсэлтэд шаардлагагүй олон зураг бүү явуул.
-- Зөвхөн IMAGE KEY-ээр сонго.
-- Хэрэв эргэлзээтэй бол image_keys=[].
+Зураг хүссэн үед тохирох key сонгоно.
 """
 
+
 # =========================================================
-# VALIDATION
+# ENVIRONMENT
 # =========================================================
+
 def check_environment():
     missing = []
 
     if not META_PAGE_ACCESS_TOKEN:
-        missing.append("META_PAGE_ACCESS_TOKEN")
+        missing.append(
+            "META_PAGE_ACCESS_TOKEN"
+        )
 
     if not GEMINI_API_KEY:
-        missing.append("GEMINI_API_KEY")
+        missing.append(
+            "GEMINI_API_KEY"
+        )
 
     if not IMAGE_BASE_URL:
-        print("WARNING: IMAGE_BASE_URL тохируулаагүй байна.")
-        print("Messenger зураг авахын тулд PUBLIC HTTPS URL шаардлагатай.")
+        print(
+            "WARNING: IMAGE_BASE_URL тохируулаагүй байна."
+        )
 
     if missing:
         print(
@@ -271,14 +324,57 @@ def check_environment():
 
 check_environment()
 
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+client = (
+    genai.Client(
+        api_key=GEMINI_API_KEY
+    )
+    if GEMINI_API_KEY
+    else None
+)
+
 
 # =========================================================
 # HELPERS
 # =========================================================
-def resolve_photo_file(stem: str) -> Path | None:
-    """photo хавтаснаас filename stem-тэй файлыг extension-оос үл хамааран олно."""
-    exact_matches = list(PHOTO_FOLDER.glob(stem + ".*"))
+
+def normalize_text(text: str) -> str:
+    """
+    Монгол/англи текстийг энгийн хэлбэрт оруулна.
+    """
+
+    text = text.lower().strip()
+
+    replacements = {
+        "ё": "е",
+        "өү": "оу",
+        "ү": "у",
+        "ө": "о",
+    }
+
+    for old, new in replacements.items():
+        text = text.replace(
+            old,
+            new
+        )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
+
+    return text
+
+
+def resolve_photo_file(
+    stem: str
+) -> Path | None:
+
+    exact_matches = list(
+        PHOTO_FOLDER.glob(
+            stem + ".*"
+        )
+    )
 
     if exact_matches:
         return exact_matches[0]
@@ -286,16 +382,34 @@ def resolve_photo_file(stem: str) -> Path | None:
     return None
 
 
-def get_public_image_url(filename: str) -> str:
+def get_public_image_url(
+    filename: str
+) -> str:
+
     if not IMAGE_BASE_URL:
-        raise RuntimeError("IMAGE_BASE_URL тохируулаагүй байна.")
+        raise RuntimeError(
+            "IMAGE_BASE_URL тохируулаагүй байна."
+        )
 
-    encoded_filename = quote(filename, safe="")
-    return f"{IMAGE_BASE_URL}/{encoded_filename}"
+    encoded_filename = quote(
+        filename,
+        safe=""
+    )
+
+    return (
+        f"{IMAGE_BASE_URL}/{encoded_filename}"
+    )
 
 
-def add_to_history(sender_id: str, role: str, text: str):
-    history = CONVERSATIONS.setdefault(sender_id, [])
+def add_to_history(
+    sender_id: str,
+    role: str,
+    text: str
+):
+    history = CONVERSATIONS.setdefault(
+        sender_id,
+        []
+    )
 
     history.append({
         "role": role,
@@ -306,8 +420,14 @@ def add_to_history(sender_id: str, role: str, text: str):
         del history[:-MAX_HISTORY]
 
 
-def history_text(sender_id: str) -> str:
-    history = CONVERSATIONS.get(sender_id, [])
+def history_text(
+    sender_id: str
+) -> str:
+
+    history = CONVERSATIONS.get(
+        sender_id,
+        []
+    )
 
     if not history:
         return "Өмнөх яриа байхгүй."
@@ -319,8 +439,793 @@ def history_text(sender_id: str) -> str:
 
 
 # =========================================================
+# DIRECT IMAGE ROUTER
+# =========================================================
+
+def direct_image_router(
+    user_text: str
+):
+    """
+    Зураг хүсэлтийг Gemini ашиглахгүйгээр шууд танина.
+
+    None -> зурагтай холбоотой шууд хүсэлт биш
+    [] -> зураг хүссэн боловч тохирох зураг байхгүй
+    [keys] -> шууд илгээх image keys
+    """
+
+    t = normalize_text(
+        user_text
+    )
+
+    # -----------------------------------------------------
+    # Ерөнхий талбай / ерөнхий төлөвлөгөө
+    # -----------------------------------------------------
+
+    general_keywords = [
+        "талбайн зураг",
+        "талбай зураг",
+        "ерөнхий төлөвлөгөө",
+        "ерөнхий план",
+        "план зураг",
+        "план",
+        "төлөвлөлтийн зураг",
+        "төлөвлөлт зураг",
+        "хотхоны зураг",
+        "хотхон зураг",
+        "нийт зураг",
+    ]
+
+    if any(
+        keyword in t
+        for keyword in general_keywords
+    ):
+
+        if not any(
+            x in t
+            for x in [
+                "таун",
+                "мульт",
+                "зогсоол",
+                "спорт",
+                "тоглоом",
+                "ногоон",
+                "тохижилт",
+                "амрах",
+            ]
+        ):
+            return [
+                "GENERAL_PLAN"
+            ]
+
+    # -----------------------------------------------------
+    # Parking
+    # -----------------------------------------------------
+
+    if any(
+        keyword in t
+        for keyword in [
+            "зогсоол",
+            "дулаан зогсоол",
+            "машины зогсоол",
+            "б1 зогсоол",
+            "нэгдсэн зогсоол",
+        ]
+    ):
+
+        if any(
+            keyword in t
+            for keyword in [
+                "план",
+                "төлөвлөлт",
+            ]
+        ):
+            return [
+                "MULT_PARKING_SPACE"
+            ]
+
+        if any(
+            keyword in t
+            for keyword in [
+                "харагдах",
+                "гадаад",
+                "үзэмж",
+            ]
+        ):
+            return [
+                "MULT_PARKING_SPACE_1"
+            ]
+
+        if any(
+            keyword in t
+            for keyword in [
+                "зураг",
+                "үзье",
+                "үзмээр",
+                "харья",
+            ]
+        ):
+            return [
+                "MULT_PARKING_SPACE",
+                "MULT_PARKING_SPACE_1",
+            ]
+
+        return None
+
+    # -----------------------------------------------------
+    # Townhouse 267 / 266
+    # -----------------------------------------------------
+
+    if (
+        any(
+            x in t
+            for x in [
+                "267",
+                "266"
+            ]
+        )
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "план",
+                "төлөвлөлт",
+                "үзье",
+                "харья",
+                "зураг авья",
+            ]
+        )
+    ):
+        return [
+            "TOWNHOUSE_266",
+            "TOWNHOUSE_266_1",
+        ]
+
+    # -----------------------------------------------------
+    # Townhouse 213 / 212
+    # -----------------------------------------------------
+
+    if (
+        any(
+            x in t
+            for x in [
+                "213",
+                "212"
+            ]
+        )
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "план",
+                "төлөвлөлт",
+                "үзье",
+                "харья",
+                "зураг авья",
+            ]
+        )
+    ):
+        return [
+            "TOWNHOUSE_212",
+            "TOWNHOUSE_212_1",
+        ]
+
+    # -----------------------------------------------------
+    # Townhouse general
+    # -----------------------------------------------------
+
+    if (
+        "таун хаус" in t
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "үзье",
+                "харья",
+                "план",
+                "төлөвлөлт",
+            ]
+        )
+    ):
+        return [
+            "TOWNHOUSE_266",
+            "TOWNHOUSE_212",
+        ]
+
+    # -----------------------------------------------------
+    # Mult house general
+    # -----------------------------------------------------
+
+    if (
+        "мульт хаус" in t
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "үзье",
+                "харья",
+                "план",
+                "төлөвлөлт",
+            ]
+        )
+    ):
+        return [
+            "MULT_126",
+            "MULT_125",
+            "MULT_192",
+        ]
+
+    # -----------------------------------------------------
+    # Specific MULT sizes
+    # -----------------------------------------------------
+
+    mult_image_map = {
+        "126.32": "MULT_126_32",
+        "126,32": "MULT_126_32",
+        "126": "MULT_126",
+        "125.21": "MULT_125",
+        "125,21": "MULT_125",
+        "120.85": "MULT_120",
+        "120,85": "MULT_120",
+        "116": "MULT_116",
+        "100.77": "MULT_100",
+        "100,77": "MULT_100",
+        "136.42": "MULT_136",
+        "136,42": "MULT_136",
+        "178.39": "MULT_178",
+        "178,39": "MULT_178",
+        "189.64": "MULT_189_64",
+        "189,64": "MULT_189_64",
+        "189.52": "MULT_189",
+        "189,52": "MULT_189",
+        "192.25": "MULT_192",
+        "192,25": "MULT_192",
+        "198.52": "MULT_198",
+        "198,52": "MULT_198",
+    }
+
+    if any(
+        x in t
+        for x in [
+            "мульт",
+            "мульт хаус",
+        ]
+    ):
+
+        for size, key in mult_image_map.items():
+
+            if (
+                size in t
+                and any(
+                    x in t
+                    for x in [
+                        "зураг",
+                        "план",
+                        "төлөвлөлт",
+                        "үзье",
+                        "харья",
+                    ]
+                )
+            ):
+                return [key]
+
+    # -----------------------------------------------------
+    # Green / landscaping / relaxation
+    # -----------------------------------------------------
+
+    if (
+        any(
+            x in t
+            for x in [
+                "ногоон байгууламж",
+                "ногоон цэцэрлэг",
+                "ногоон орчин",
+            ]
+        )
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "үзье",
+                "харья",
+            ]
+        )
+    ):
+        return [
+            "GREEN_GARDEN"
+        ]
+
+    if (
+        "тохижилт" in t
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "үзье",
+                "харья",
+            ]
+        )
+    ):
+        return [
+            "LANDSCAPING"
+        ]
+
+    if (
+        any(
+            x in t
+            for x in [
+                "амрах талбай",
+                "амралтын талбай",
+            ]
+        )
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "үзье",
+                "харья",
+            ]
+        )
+    ):
+        return [
+            "RELAXATION_AREA"
+        ]
+
+    # -----------------------------------------------------
+    # Children's areas
+    # -----------------------------------------------------
+
+    if (
+        any(
+            x in t
+            for x in [
+                "0-5",
+                "0 5",
+                "0-5 нас",
+            ]
+        )
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "талбай",
+                "үзье",
+            ]
+        )
+    ):
+        return [
+            "SPORTS_AREA_0_5"
+        ]
+
+    if (
+        any(
+            x in t
+            for x in [
+                "9-13",
+                "9 13",
+                "9-13 нас",
+            ]
+        )
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "талбай",
+                "үзье",
+            ]
+        )
+    ):
+        return [
+            "SPORTS_AREA_9_13"
+        ]
+
+    if (
+        any(
+            x in t
+            for x in [
+                "13-16",
+                "13 16",
+                "13-16 нас",
+            ]
+        )
+        and any(
+            x in t
+            for x in [
+                "зураг",
+                "талбай",
+                "үзье",
+            ]
+        )
+    ):
+        return [
+            "SPORTS_AREA_13_16"
+        ]
+
+    if (
+        "спортын талбай" in t
+        and any(
+            x in t
+            for x in [
+                "план",
+                "төлөвлөлт",
+                "зураг",
+                "үзье",
+            ]
+        )
+    ):
+        return [
+            "SPORTS_AREA_PLAN"
+        ]
+
+    return None
+
+
+# =========================================================
+# DIRECT FAQ ROUTER
+# =========================================================
+
+def direct_faq_router(
+    user_text: str
+):
+    """
+    Энгийн, баталгаатай Miners Villa асуултад
+    Gemini ашиглахгүйгээр шууд хариулна.
+
+    None -> Gemini хэрэгтэй
+    string -> шууд хариулт
+    """
+
+    t = normalize_text(
+        user_text
+    )
+
+    # -----------------------------------------------------
+    # Greetings
+    # -----------------------------------------------------
+
+    greetings = [
+        "сайн уу",
+        "сайн байна уу",
+        "сайн байнуу",
+        "байна уу",
+        "hello",
+        "hi",
+        "hey",
+    ]
+
+    if (
+        t in greetings
+        or any(
+            t.startswith(x + " ")
+            for x in greetings
+        )
+    ):
+        return (
+            "Сайн байна уу? 😊 "
+            "Miners Villa төслийн талаар үнэ, "
+            "төлөвлөлт, төлбөрийн нөхцөл болон "
+            "байршлын мэдээлэл өгөхөд бэлэн байна."
+        )
+
+    # -----------------------------------------------------
+    # Price
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "м2 хэд",
+            "м2 хэд вэ",
+            "м2 үнэ",
+            "м2 үнэ хэд",
+            "1м2",
+            "1 м2",
+            "квадратын үнэ",
+            "квадрат үнэ",
+            "үнэ хэд",
+            "үнэ хэд вэ",
+            "хэдэн төгрөг",
+            "м2 нь",
+        ]
+    ):
+        return (
+            "Одоогийн м² үнэ 5,500,000–5,800,000 ₮ байна. "
+            "Яг сонголтын үнэ болон дэлгэрэнгүй мэдээллийг "
+            "9430-7017 дугаараас лавлаарай 😊"
+        )
+
+    # -----------------------------------------------------
+    # Sales phone
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "утас",
+            "холбогдох",
+            "холбоо барих",
+            "дугаар",
+            "утасны дугаар",
+        ]
+    ):
+        return (
+            "Манай борлуулалтын утас: 9430-7017 😊"
+        )
+
+    # -----------------------------------------------------
+    # Sales office
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "оффис хаана",
+            "оффисын хаяг",
+            "борлуулалтын оффис",
+            "оффис",
+        ]
+    ):
+        return (
+            f"Борлуулалтын оффис: {SALES_OFFICE}. "
+            f"Утас: {SALES_PHONE} 😊"
+        )
+
+    # -----------------------------------------------------
+    # Location
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "хаана байрладаг",
+            "хаана байрлах",
+            "байршил",
+            "байрлал",
+            "хаана байдаг",
+            "хаана вэ",
+            "хотын хаана",
+        ]
+    ):
+        return (
+            f"Miners Villa нь {LOCATION_TEXT}. "
+            f"Дэлгэрэнгүй мэдээллийг {SALES_PHONE} дугаараас "
+            "лавлаарай 😊"
+        )
+
+    # -----------------------------------------------------
+    # Payment
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "төлбөрийн нөхцөл",
+            "төлөлтийн нөхцөл",
+            "хэрхэн төлөх",
+            "яаж төлөх",
+            "урьдчилгаа",
+            "төлбөр хэдэн хувь",
+            "хэдэн хувь төлөх",
+        ]
+    ):
+        return (
+            f"Төлбөрийн нөхцөл: {PAYMENT_TEXT} "
+            "Явцын төлбөрт зөвхөн байрны бартер сонсоно."
+        )
+
+    # -----------------------------------------------------
+    # Barter
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "бартер",
+            "байраар төлөх",
+            "машинаар төлөх",
+            "газраар төлөх",
+        ]
+    ):
+
+        if any(
+            x in t
+            for x in [
+                "машин",
+                "машинаар",
+            ]
+        ):
+            return (
+                "Явцын төлбөрт зөвхөн байрны бартер сонсоно. "
+                "Машины бартер зөвшөөрөхгүй."
+            )
+
+        if any(
+            x in t
+            for x in [
+                "газар",
+                "газраар",
+            ]
+        ):
+            return (
+                "Явцын төлбөрт зөвхөн байрны бартер сонсоно. "
+                "Газрын бартер зөвшөөрөхгүй."
+            )
+
+        return (
+            "Явцын төлбөрт зөвхөн байрны бартер сонсоно. "
+            "Машин, газар, бизнесийн бартер зөвшөөрөхгүй."
+        )
+
+    # -----------------------------------------------------
+    # Townhouse sizes
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "таун хаус хэдэн м2",
+            "таун хаусын талбай",
+            "таун хаусын хэмжээ",
+            "таунхаус хэдэн м2",
+            "таунхаусын талбай",
+        ]
+    ):
+        return (
+            "Таун хаусын сонголтууд 213.33 м² болон "
+            "267.48 м² талбайтай."
+        )
+
+    # -----------------------------------------------------
+    # Mult house sizes
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "мульт хаус хэдэн м2",
+            "мульт хаусын талбай",
+            "мульт хаусын хэмжээ",
+            "мультхаусын талбай",
+        ]
+    ):
+        return (
+            "Мульт хаусын талбайнууд: "
+            "126, 125.21, 192.25, 189.64, "
+            "136.42, 178.39, 198.52 болон 189.52 м²."
+        )
+
+    # -----------------------------------------------------
+    # Specific MULT sizes
+    # -----------------------------------------------------
+
+    mult_size_answers = {
+        "126.32": "126.32 м²",
+        "126,32": "126.32 м²",
+        "126": "126 м²",
+        "125.21": "125.21 м²",
+        "125,21": "125.21 м²",
+        "120.85": "120.85 м²",
+        "120,85": "120.85 м²",
+        "116": "116 м²",
+        "100.77": "100.77 м²",
+        "100,77": "100.77 м²",
+        "136.42": "136.42 м²",
+        "136,42": "136.42 м²",
+        "178.39": "178.39 м²",
+        "178,39": "178.39 м²",
+        "189.64": "189.64 м²",
+        "189,64": "189.64 м²",
+        "189.52": "189.52 м²",
+        "189,52": "189.52 м²",
+        "192.25": "192.25 м²",
+        "192,25": "192.25 м²",
+        "198.52": "198.52 м²",
+        "198,52": "198.52 м²",
+    }
+
+    if "мульт" in t:
+
+        for size, display_size in mult_size_answers.items():
+
+            if size in t:
+                return (
+                    f"Мульт хаусын {display_size} сонголт байна. "
+                    "Зураг үзэх бол \"зураг үзье\" гэж бичээрэй 😊"
+                )
+
+    # -----------------------------------------------------
+    # Parking information
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "зогсоолын үнэ",
+            "зогсоол хэд",
+            "зогсоол хэд вэ",
+            "дулаан зогсоолын үнэ",
+            "машины зогсоолын үнэ",
+        ]
+    ):
+        return PARKING_TEXT
+
+    if any(
+        x in t
+        for x in [
+            "дулаан зогсоол",
+            "нэгдсэн зогсоол",
+            "б1 зогсоол",
+            "машины зогсоол",
+        ]
+    ):
+        return PARKING_TEXT
+
+    # -----------------------------------------------------
+    # Construction progress
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "барилгын явц",
+            "явц ямар",
+            "барилга хэр явж",
+            "барилга явж байна",
+            "шинэ мэдээ",
+        ]
+    ):
+        return (
+            "Барилгын явцыг 7 хоног бүрийн 1 дэх өдөр "
+            "Facebook Page болон Instagram дээр Reel "
+            "хэлбэрээр шинэчилж хүргэдэг."
+        )
+
+    # -----------------------------------------------------
+    # Construction timing
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "хэзээ ашиглалтад",
+            "ашиглалтад орох",
+            "хэзээ дуусах",
+            "хэзээ баригдаж дуусах",
+        ]
+    ):
+        return (
+            "2026 оны өвөл гэхэд дотоод заслын ажлыг "
+            "эхлүүлэхээр ажиллаж байна. "
+            "Ашиглалтад орох баталгаатай огноо одоогоор "
+            "өгөөгүй байна."
+        )
+
+    # -----------------------------------------------------
+    # Human contact
+    # -----------------------------------------------------
+
+    if any(
+        x in t
+        for x in [
+            "хүнтэй ярья",
+            "хүнтэй ярих",
+            "борлуулалтын ажилтан",
+            "борлуулалттай ярья",
+            "менежертэй ярья",
+            "менежер",
+        ]
+    ):
+        return (
+            "😊 Манай борлуулалтын албатай "
+            "9430-7017 дугаараар холбогдоорой."
+        )
+
+    return None
+
+
+# =========================================================
 # FACEBOOK MESSENGER
 # =========================================================
+
 def messenger_url():
     return (
         "https://graph.facebook.com/v20.0/me/messages"
@@ -328,9 +1233,15 @@ def messenger_url():
     )
 
 
-def send_fb_message(recipient_id: str, text: str):
+def send_fb_message(
+    recipient_id: str,
+    text: str
+):
+
     if not META_PAGE_ACCESS_TOKEN:
-        print("ERROR: META_PAGE_ACCESS_TOKEN байхгүй.")
+        print(
+            "ERROR: META_PAGE_ACCESS_TOKEN байхгүй."
+        )
         return
 
     payload = {
@@ -343,6 +1254,7 @@ def send_fb_message(recipient_id: str, text: str):
     }
 
     try:
+
         response = requests.post(
             messenger_url(),
             json=payload,
@@ -352,17 +1264,31 @@ def send_fb_message(recipient_id: str, text: str):
             timeout=30,
         )
 
-        print("FB TEXT:", response.status_code, response.text)
+        print(
+            "FB TEXT:",
+            response.status_code,
+            response.text
+        )
 
         response.raise_for_status()
 
     except Exception as e:
-        print("Error sending text to Facebook:", e)
+
+        print(
+            "Error sending text to Facebook:",
+            repr(e)
+        )
 
 
-def send_fb_image(recipient_id: str, image_url: str):
+def send_fb_image(
+    recipient_id: str,
+    image_url: str
+):
+
     if not META_PAGE_ACCESS_TOKEN:
-        print("ERROR: META_PAGE_ACCESS_TOKEN байхгүй.")
+        print(
+            "ERROR: META_PAGE_ACCESS_TOKEN байхгүй."
+        )
         return
 
     payload = {
@@ -381,6 +1307,7 @@ def send_fb_image(recipient_id: str, image_url: str):
     }
 
     try:
+
         response = requests.post(
             messenger_url(),
             json=payload,
@@ -390,19 +1317,30 @@ def send_fb_image(recipient_id: str, image_url: str):
             timeout=30,
         )
 
-        print("FB IMAGE:", response.status_code, response.text)
+        print(
+            "FB IMAGE:",
+            response.status_code,
+            response.text
+        )
 
         response.raise_for_status()
 
     except Exception as e:
-        print("Error sending image to Facebook:", e)
+
+        print(
+            "Error sending image to Facebook:",
+            repr(e)
+        )
 
 
-def send_images_by_keys(recipient_id: str, image_keys):
+def send_images_by_keys(
+    recipient_id: str,
+    image_keys
+):
+
     if not image_keys:
         return
 
-    # Давхардсан key-ийг арилгана.
     seen = set()
 
     for key in image_keys:
@@ -413,14 +1351,22 @@ def send_images_by_keys(recipient_id: str, image_keys):
         seen.add(key)
 
         if key not in IMAGE_LIBRARY:
-            print("BLOCKED unknown image key:", key)
+            print(
+                "BLOCKED unknown image key:",
+                key
+            )
             continue
 
         stem = IMAGE_LIBRARY[key]
 
-        local_path = resolve_photo_file(stem)
+        local_path = resolve_photo_file(
+            stem
+        )
 
-        if local_path is None or not local_path.is_file():
+        if (
+            local_path is None
+            or not local_path.is_file()
+        ):
             print(
                 "IMAGE FILE NOT FOUND FOR KEY:",
                 key,
@@ -432,7 +1378,10 @@ def send_images_by_keys(recipient_id: str, image_keys):
         filename = local_path.name
 
         try:
-            public_url = get_public_image_url(filename)
+
+            public_url = get_public_image_url(
+                filename
+            )
 
             print(
                 "Sending image:",
@@ -446,13 +1395,29 @@ def send_images_by_keys(recipient_id: str, image_keys):
             )
 
         except Exception as e:
-            print("Image send error:", e)
+
+            print(
+                "Image send error:",
+                repr(e)
+            )
 
 
 # =========================================================
 # GEMINI
 # =========================================================
-def ask_gemini(sender_id: str, user_text: str):
+
+def ask_gemini(
+    sender_id: str,
+    user_text: str
+):
+
+    """
+    Gemini-г зөвхөн router-ууд танихгүй асуултад ашиглана.
+
+    429 -> шууд quota fallback
+    503 -> 3 хүртэл retry
+    бусад алдаа -> fallback
+    """
 
     if not client:
         raise RuntimeError(
@@ -465,11 +1430,13 @@ def ask_gemini(sender_id: str, user_text: str):
 =========================================================
 ӨМНӨХ ЯРИАНЫ КОНТЕКСТ
 =========================================================
+
 {history_text(sender_id)}
 
 =========================================================
 ХЭРЭГЛЭГЧИЙН ШИНЭ МЕССЕЖ
 =========================================================
+
 {user_text}
 
 =========================================================
@@ -479,20 +1446,22 @@ def ask_gemini(sender_id: str, user_text: str):
 ЗӨВХӨН JSON буцаа.
 
 {{
-  "reply": "Хэрэглэгчид илгээх Монгол хэл дээрх богино хариулт",
-  "image_keys": []
+    "reply": "Монгол хэл дээрх богино хариулт",
+    "image_keys": []
 }}
 
 ЧУХАЛ:
-- JSON-оос өөр ямар ч текст бүү бич.
-- reply заавал богино, бүтэн өгүүлбэр байна.
-- image_keys дотор зөвхөн зөвшөөрөгдсөн IMAGE KEY ашигла.
-- Filename, URL, Windows path бүү бич.
-- Зураг шаардлагагүй бол image_keys = [] байна.
+
+* JSON-оос өөр текст бүү бич.
+* reply заавал бүтэн өгүүлбэр байна.
+* image_keys зөвхөн зөвшөөрөгдсөн key байна.
+* Filename, URL, Windows path бүү бич.
+* Зураг шаардлагагүй бол image_keys = [] байна.
 """
 
     last_error = None
 
+    # Зөвхөн түр зуурын server error үед retry.
     for attempt in range(3):
 
         try:
@@ -507,17 +1476,24 @@ def ask_gemini(sender_id: str, user_text: str):
                 ),
             )
 
-            raw = (response.text or "").strip()
+            raw = (
+                response.text or ""
+            ).strip()
 
             print(
                 f"GEMINI RAW (attempt {attempt + 1}):",
                 raw
             )
 
-            data = json.loads(raw)
+            data = json.loads(
+                raw
+            )
 
             reply = str(
-                data.get("reply", "")
+                data.get(
+                    "reply",
+                    ""
+                )
             ).strip()
 
             image_keys = data.get(
@@ -541,11 +1517,7 @@ def ask_gemini(sender_id: str, user_text: str):
             ]
 
             if not reply:
-                reply = (
-                    "Энэ мэдээллийг одоогоор надад өгөөгүй байна. "
-                    "Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас "
-                    "лавлаарай 😊"
-                )
+                reply = UNKNOWN_TEXT
 
             return reply, valid_keys
 
@@ -553,36 +1525,200 @@ def ask_gemini(sender_id: str, user_text: str):
 
             last_error = e
 
+            error_text = repr(e)
+
             print(
                 f"GEMINI ERROR "
                 f"(attempt {attempt + 1}/3):",
-                repr(e)
+                error_text
             )
 
-            if attempt < 2:
-                time.sleep(2)
+            # -------------------------------------------------
+            # 429 quota
+            # -------------------------------------------------
+
+            if (
+                "429" in error_text
+                or "RESOURCE_EXHAUSTED" in error_text
+                or "quota" in error_text.lower()
+            ):
+                print(
+                    "GEMINI QUOTA EXCEEDED - "
+                    "fallback ашиглана."
+                )
+                break
+
+            # -------------------------------------------------
+            # 503 temporary server error
+            # -------------------------------------------------
+
+            if (
+                "503" in error_text
+                or "UNAVAILABLE" in error_text
+            ):
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+
+            # -------------------------------------------------
+            # JSON parse error
+            # -------------------------------------------------
+
+            if isinstance(
+                e,
+                json.JSONDecodeError
+            ):
+                break
+
+            # Бусад алдаанд дахин retry хийхгүй.
+            break
 
     raise last_error
 
 
 # =========================================================
-# PROCESS AI RESPONSE
+# PROCESS RESPONSE
 # =========================================================
+
 def process_ai_response(
     sender_id: str,
     user_text: str
 ):
+
     try:
 
-        reply, image_keys = ask_gemini(
-            sender_id,
+        print(
+            "ROUTER CHECK:",
             user_text
         )
 
-        print("AI REPLY:", reply)
-        print("AI IMAGE KEYS:", image_keys)
+        # =====================================================
+        # 1. ЗУРАГ ROUTER
+        # =====================================================
 
-        # Conversation history
+        image_result = direct_image_router(
+            user_text
+        )
+
+        if image_result is not None:
+
+            print(
+                "DIRECT IMAGE ROUTER:",
+                image_result
+            )
+
+            if image_result:
+
+                add_to_history(
+                    sender_id,
+                    "user",
+                    user_text
+                )
+
+                reply = (
+                    "Мэдээж 😊 Зургийг явууллаа."
+                )
+
+                add_to_history(
+                    sender_id,
+                    "assistant",
+                    reply
+                )
+
+                send_fb_message(
+                    sender_id,
+                    reply
+                )
+
+                send_images_by_keys(
+                    sender_id,
+                    image_result
+                )
+
+                return
+
+        # =====================================================
+        # 2. LOCAL FAQ ROUTER
+        # =====================================================
+
+        direct_reply = direct_faq_router(
+            user_text
+        )
+
+        if direct_reply is not None:
+
+            print(
+                "DIRECT FAQ REPLY:",
+                direct_reply
+            )
+
+            add_to_history(
+                sender_id,
+                "user",
+                user_text
+            )
+
+            add_to_history(
+                sender_id,
+                "assistant",
+                direct_reply
+            )
+
+            send_fb_message(
+                sender_id,
+                direct_reply
+            )
+
+            return
+
+        # =====================================================
+        # 3. GEMINI
+        # =====================================================
+
+        print(
+            "ROUTER: Gemini ашиглана"
+        )
+
+        try:
+
+            reply, image_keys = ask_gemini(
+                sender_id,
+                user_text
+            )
+
+        except Exception as gemini_error:
+
+            error_text = repr(
+                gemini_error
+            )
+
+            print(
+                "GEMINI FALLBACK:",
+                error_text
+            )
+
+            reply = (
+                "Энэ асуултад яг таг мэдээлэл өгөхийн тулд "
+                "манай борлуулалтын албатай 9430-7017 "
+                "дугаараар холбогдоорой 😊"
+            )
+
+            image_keys = []
+
+        print(
+            "AI REPLY:",
+            reply
+        )
+
+        print(
+            "AI IMAGE KEYS:",
+            image_keys
+        )
+
+        # =====================================================
+        # HISTORY
+        # =====================================================
+
         add_to_history(
             sender_id,
             "user",
@@ -595,29 +1731,22 @@ def process_ai_response(
             reply
         )
 
-        # Text reply
+        # =====================================================
+        # FACEBOOK TEXT
+        # =====================================================
+
         send_fb_message(
             sender_id,
             reply
         )
 
-        # Images
+        # =====================================================
+        # FACEBOOK IMAGE
+        # =====================================================
+
         send_images_by_keys(
             sender_id,
             image_keys
-        )
-
-    except json.JSONDecodeError as e:
-
-        print(
-            "Gemini JSON parse error:",
-            e
-        )
-
-        send_fb_message(
-            sender_id,
-            "Уучлаарай, түр зуурын техникийн алдаа гарлаа. "
-            "Дахин нэг асуугаад үзээрэй 😊"
         )
 
     except Exception as e:
@@ -637,15 +1766,25 @@ def process_ai_response(
 # =========================================================
 # META WEBHOOK VERIFICATION
 # =========================================================
+
 @app.get("/webhook")
 async def verify_webhook(
     request: Request
 ):
+
     params = request.query_params
 
-    mode = params.get("hub.mode")
-    token = params.get("hub.verify_token")
-    challenge = params.get("hub.challenge")
+    mode = params.get(
+        "hub.mode"
+    )
+
+    token = params.get(
+        "hub.verify_token"
+    )
+
+    challenge = params.get(
+        "hub.challenge"
+    )
 
     if (
         mode == "subscribe"
@@ -665,6 +1804,7 @@ async def verify_webhook(
 # =========================================================
 # META WEBHOOK RECEIVE MESSAGE
 # =========================================================
+
 @app.post("/webhook")
 async def handle_webhook(
     request: Request,
@@ -699,7 +1839,6 @@ async def handle_webhook(
             []
         ):
 
-            # Bot өөрийн echo message-ийг дахин боловсруулахгүй.
             message = messaging_event.get(
                 "message"
             )
@@ -707,6 +1846,7 @@ async def handle_webhook(
             if not message:
                 continue
 
+            # Bot өөрийн echo message-ийг дахин боловсруулахгүй.
             if message.get("is_echo"):
                 continue
 
@@ -730,10 +1870,23 @@ async def handle_webhook(
             if not user_text:
                 continue
 
-            print("=" * 60)
-            print("USER:", sender_id)
-            print("MESSAGE:", user_text)
-            print("=" * 60)
+            print(
+                "=" * 60
+            )
+
+            print(
+                "USER:",
+                sender_id
+            )
+
+            print(
+                "MESSAGE:",
+                user_text
+            )
+
+            print(
+                "=" * 60
+            )
 
             background_tasks.add_task(
                 process_ai_response,
@@ -750,6 +1903,7 @@ async def handle_webhook(
 # =========================================================
 # ROOT
 # =========================================================
+
 @app.get("/")
 async def root():
 
