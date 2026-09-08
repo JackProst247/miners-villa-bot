@@ -1,136 +1,147 @@
 import os
+import json
 import requests
+from pathlib import Path
+from urllib.parse import quote
+from typing import Dict, List
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
+from fastapi.staticfiles import StaticFiles
 from google import genai
-
-app = FastAPI()
+from google.genai import types
 
 # =========================================================
-# ОРЧНЫ ХУВЬСАГЧУУД
+# .env
 # =========================================================
+load_dotenv()
 
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+# Messenger зураг авахад ашиглах PUBLIC HTTPS URL.
+# Жишээ:
+# IMAGE_BASE_URL=https://xxxx.trycloudflare.com/photo
+IMAGE_BASE_URL = os.getenv("IMAGE_BASE_URL", "").rstrip("/")
+
+# Gemini model. Google-ийн одоогийн жишээнүүдтэй нийцүүлж env-ээр сольж болдог.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
 
 # =========================================================
-# MINERS VILLA AI БОРЛУУЛАГЧИЙН ТОХИРГОО
+# APP + PHOTO FOLDER
 # =========================================================
+app = FastAPI(title="Miners Villa Messenger Bot")
 
+BASE_DIR = Path(__file__).resolve().parent
+PHOTO_FOLDER = BASE_DIR / "photo"
+PHOTO_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# D:\Miners Villa bot\photo\ файлуудыг
+# https://PUBLIC_URL/photo/filename хэлбэрээр нээх боломжтой болгоно.
+app.mount(
+    "/photo",
+    StaticFiles(directory=str(PHOTO_FOLDER)),
+    name="photo",
+)
+
+# =========================================================
+# IMAGE LIBRARY
+# Зургийн жинхэнэ filename-уудыг screenshot дээрхтэй тааруулсан.
+# Файлын нэрийг дахин солих шаардлагагүй.
+# =========================================================
+IMAGE_LIBRARY = {
+    # Ерөнхий төлөвлөгөө / орчин
+    "GENERAL_PLAN": "general_plan",
+    "GREEN_GARDEN": "Green_garden",
+    "LANDSCAPING": "landscaping",
+    "RELAXATION_AREA": "relaxation_area",
+
+    # Тоглоомын / спортын талбай
+    "SPORTS_AREA_0_5": "sports_area_0-5",
+    "SPORTS_AREA_9_13": "sports_area_9-13",
+    "SPORTS_AREA_13_16": "sports_area_13-16",
+    "SPORTS_AREA_PLAN": "sports_area_plan",
+
+    # Мульт хаус
+    "MULT": "mult",
+    "MULT_100": "mult_100",
+    "MULT_116": "mult_116",
+    "MULT_120": "mult_120",
+    "MULT_125": "mult_125",
+    "MULT_126": "mult_126",
+    "MULT_126_32": "mult_126_32",
+    "MULT_136": "mult_136",
+    "MULT_178": "mult_178",
+    "MULT_189": "mult_189",
+    "MULT_189_64": "mult_189_64",
+    "MULT_192": "mult_192",
+    "MULT_198": "mult_198",
+
+    # Мульт хаус зогсоолын зураг
+    # Файлын нэр Windows Explorer дээр таслагдаж харагдаж байгаа тул
+    # яг бүтэн нэрийг дараа нь нягталж болно.
+
+    # Таун хаус
+    "TOWNHOUSE_212": "townhouse_212",
+    "TOWNHOUSE_212_1": "townhouse_212_1",
+    "TOWNHOUSE_266": "townhouse_266",
+    "TOWNHOUSE_266_1": "townhouse_266_1",
+}
+
+
+# Gemini зөвхөн эдгээр KEY-ээс сонгоно.
+IMAGE_KEYS = list(IMAGE_LIBRARY.keys())
+
+# =========================================================
+# SIMPLE CONVERSATION MEMORY
+# "267?" гэх мэт богино follow-up асуултад тусална.
+# Server restart хийхэд memory цэвэрлэгдэнэ.
+# =========================================================
+CONVERSATIONS: Dict[str, List[Dict[str, str]]] = {}
+MAX_HISTORY = 8
+
+# =========================================================
+# MINERS VILLA SYSTEM PROMPT
+# =========================================================
 SYSTEM_PROMPT = """
-ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН 23 НАСТАЙ, ЭЕЛДЭГ, ЗӨӨЛӨН, ТУСЧ БОРЛУУЛАГЧ.
+ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН 23 НАСТАЙ, ЭЕЛДЭГ,
+ЗӨӨЛӨН, ТУСЧ БОРЛУУЛАГЧ.
 
-Таны зорилго:
+ЗОРИЛГО:
 - Хэрэглэгчид Miners Villa-ийн талаар үнэн зөв мэдээлэл өгөх
-- Хэрэглэгчийн асуултад яг тохирсон хариулт өгөх
-- Хэт урт тайлбар хийхгүй байх
-- Хэрэглэгчийг дарамтлахгүйгээр борлуулалтын дараагийн алхам руу зөөлөн чиглүүлэх
+- Асуултад яг тохирсон, богино хариулт өгөх
+- Хэт робот шиг, хэт албан ёсны бичихгүй
+- Хэрэглэгчийг дарамтлахгүйгээр шаардлагатай үед борлуулалтын багтай холбох
 
-=========================================================
-I. ЯРИАНЫ ӨНГӨ АЯС
-=========================================================
+ХЭЛ, ӨНГӨ:
+- Монгол хэлээр хариул.
+- Дулаан, эелдэг, хүнтэй ярилцаж байгаа мэт бич.
+- Ихэнх хариулт 1-3 өгүүлбэр байна.
+- Шаардлагатай үед emoji ашиглаж болно.
+- Бүх хариултын төгсгөлд CTA хийх шаардлагагүй.
+- Хэрэглэгч мэндэлбэл мэндэлж хариул.
+- Хэрэглэгчийн асуултыг уртаар давтахгүй.
 
-1. Монгол хэлээр хариул.
-2. Эелдэг, дулаан, хүнтэй ярилцаж байгаа мэт бич.
-3. Хэт албан ёсны, робот шиг хэллэг бүү ашигла.
-4. Хэрэглэгч "Сайн байна уу" гэж мэндэлбэл эелдгээр мэндэлж хариул.
-5. Хэрэглэгчийн асуултыг дахин давтаж урт тайлбар бүү хий.
-6. Боломжтой бол 2-3 өгүүлбэрт багтаа.
-7. Хариултыг ойлгомжтой болгохын тулд шаардлагатай үед emoji ашиглаж болно.
-8. Нэг хариултад хэт олон emoji бүү ашигла.
-9. Хэрэглэгч богино асуулт асуувал богино хариул.
-10. Хэрэглэгч дэлгэрэнгүй асуувал шаардлагатай хэмжээнд дэлгэрүүл.
+МЭДЭЭЛЛИЙН ҮНДСЭН САН:
+- Төслийн нэр: Miners Villa
+- М² үнэ: 5,500,000 - 5,800,000 ₮
+- Борлуулалтын утас: 9430-7017
+- Борлуулалтын оффис: Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, төв зам дагуу.
 
-=========================================================
-II. ХАМГИЙН ЧУХАЛ ДҮРЭМ
-=========================================================
-
-ЗӨВХӨН ЭНЭ PROMPT-Д ӨГСӨН MINERS VILLA МЭДЭЭЛЛИЙГ АШИГЛА.
-
-Мэдээллийн санд байхгүй:
-- үнэ
-- талбай
-- байрны тоо
-- ашиглалтад орох хугацаа
-- хөнгөлөлт
-- урамшуулал
-- төлбөрийн нөхцөл
-- бартер
-- материал
-- зогсоол
-- сургууль
-- цэцэрлэг
-- үйлчилгээ
-- бусад нөхцөл
-
-зэрэг мэдээллийг ӨӨРӨӨ ЗОХИОЖ БОЛОХГҮЙ.
-
-Хэрэв мэдээлэл байхгүй бол:
-"Энэ мэдээллийг одоогоор надад өгөөгүй байна. Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
-гэж эелдгээр хариул.
-
-Мэдэхгүй зүйл дээр таамаглаж хариулахгүй.
-
-=========================================================
-III. MINERS VILLA МЭДЭЭЛЛИЙН САН
-=========================================================
-
-1. ЕРӨНХИЙ МЭДЭЭЛЭЛ
-
-Төслийн нэр:
-Miners Villa
-
-Мкв үнэ:
-5,500,000 - 5,800,000 ₮
-
-Борлуулалтын утас:
-9430-7017
-
-Борлуулалтын оффис:
-Эрдэнэт хот, 1/16-р байрны зүүн урд буланд,
-төв зам дагуу.
-
-=========================================================
-2. ТӨЛБӨРИЙН НӨХЦӨЛ
-=========================================================
-
-Төлбөрийн нөхцөл:
-
+ТӨЛБӨРИЙН НӨХЦӨЛ:
 - Урьдчилгаа: 30%
 - Явцын төлбөр: 40%
 - Явцын төлбөр: 20%
 - Түлхүүр гардуулахад: 10%
-
-Нийт:
-100%
-
-ЧУХАЛ:
-Явцын төлбөрт зөвхөн байрны бартер сонсоно.
-
-Хэрэглэгч:
-"Бартер авах уу?"
-гэж асуувал:
-"Тийм ээ, явцын төлбөрт зөвхөн байрны бартер сонсож байгаа 😊"
-гэж ойлгомжтой хариул.
-
-Хэрэглэгч:
-"Машин бартер авах уу?"
-"Газар бартер авах уу?"
-"Бизнес бартер авах уу?"
-гэх мэт асуулт асуувал зөвшөөрсөн гэж хэлж БОЛОХГҮЙ.
-
-=========================================================
-3. ХАУСЫН ТӨРӨЛ
-=========================================================
+- Явцын төлбөрт зөвхөн байрны бартер сонсоно.
+- Машин, газар, бизнесийн бартер зөвшөөрсөн гэж хэлж болохгүй.
 
 ТАУН ХАУС:
-
 - 213.33 м²
 - 267.48 м²
 
 МУЛЬТ ХАУС:
-
 - A — 126 м²
 - B — 125.21 м²
 - C — 192.25 м²
@@ -140,322 +151,370 @@ Miners Villa
 - H — 198.52 м²
 - I — 189.52 м²
 
-Хэрэглэгч:
-"Ямар ямар хаус байгаа вэ?"
-гэвэл Таун хаус болон Мульт хаусыг тусад нь ойлгомжтой хэл.
-
-Хэрэглэгч зөвхөн:
-"267?"
-гэж асуувал өмнөх ярианы контекстэд боломжтой бол
-267.48 м² Таун хаусыг хэлж байна гэж ойлго.
-
-=========================================================
-4. ТӨСЛИЙН БАЙРШИЛ
-=========================================================
-
-Miners Villa нь:
+БАЙРШИЛ:
 - Баян-Өндөр уулын зүүн энгэрт
 - Бүсийн оношилгооны төвийн ард
 - Медипас эмнэлгийн ард
-- 30.8 га талбайд байрлана.
+- 30.8 га талбайд.
 
-Хэрэглэгч:
-"Хаана байдаг вэ?"
-гэвэл дээрх мэдээллийг богино бөгөөд ойлгомжтой хэл.
+БАРИЛГЫН АЖИЛ:
+- 2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна.
+- Үүнийг баталгаатай ашиглалтад орох огноо мэтээр хэлж болохгүй.
 
-=========================================================
-5. АШИГЛАЛТАД ОРОХ / БАРИЛГЫН АЖИЛ
-=========================================================
+ТӨЛБӨР ТӨЛӨХ:
+- Гэрээн дээрх Хаан банкны данс руу шилжүүлнэ.
+- Гүйлгээний утгад гэрээний дугаар, байрны тоот, овог нэр, регистр зэргийг бичнэ.
+- Дансны дугаарыг prompt-д өгөөгүй тул зохиож болохгүй.
+- Данс асуувал: "Дансны дугаар нь гэрээнд заасан Хаан банкны данс байна. Тодруулах шаардлагатай бол 9430-7017 дугаарт холбогдоорой 😊"
 
-Одоогийн мэдээллээр:
-2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр шаргуу ажиллаж байна.
+БАРИЛГЫН ЯВЦ:
+- 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр Reel хэлбэрээр шинэчилж хүргэдэг.
 
-Хэрэглэгч:
-"Хэзээ ашиглалтад орох вэ?"
-гэж асуувал яг баталгаатай ашиглалтад орох огноо мэтээр хэлж БОЛОХГҮЙ.
-
-Харин:
-"2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна."
-гэж мэдээл.
-
-=========================================================
-6. ТӨЛБӨР ТӨЛӨХ
-=========================================================
-
-Төлбөрийг гэрээн дээрх Хаан банкны данс руу шилжүүлнэ.
-
-Гүйлгээний утгад:
-- Гэрээний дугаар
-- Байрны тоот
-- Овог нэр
-- Регистр
-
-зэргийг бичнэ.
-
-Хэрэглэгч банкны дансны дугаар асуувал:
-Энд дансны дугаар өгөөгүй тул өөрөө зохиож БОЛОХГҮЙ.
-
-Харин:
-"Дансны дугаар нь гэрээнд заасан Хаан банкны данс байна. Тодруулах шаардлагатай бол 9430-7017 дугаарт холбогдоорой 😊"
+МЭДЭЭЛЭЛ БАЙХГҮЙ БОЛ:
+"Энэ мэдээллийг одоогоор надад өгөөгүй байна. Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
 гэж хариул.
 
-=========================================================
-7. БАРИЛГЫН ЯВЦ
-=========================================================
+ХҮНТЭЙ ЯРИХ ХҮСЭЛТ:
+"😊 Манай борлуулалтын албатай 9430-7017 дугаараар холбогдоорой."
 
-Барилгын явцын мэдээллийг:
-7 хоног бүрийн 1 дэх өдөр
-Facebook Page болон Instagram хаяг дээр
-Reel хэлбэрээр шинэчлэн хүргэдэг.
+ҮНЭ:
+- "Үнэ хэд вэ?" гэвэл м² үнэ 5,500,000–5,800,000 ₮ гэж хэл.
+- Мэдээллийн санд байхгүй м²-ийн нийт үнийг өөрөө тооцоолж баталгаатай үнэ мэтээр хэлэхгүй.
 
-Хэрэглэгч:
-"Барилгын явц ямар байгаа вэ?"
-гэвэл дээрх мэдээллийг ашигла.
+МЭДЭЭЛЭЛ ЗОХИОХГҮЙ:
+Үнэ, талбай, байрны тоо, хугацаа, хөнгөлөлт, урамшуулал,
+материал, зогсоол, сургууль, цэцэрлэг, үйлчилгээ болон бусад
+өгөөгүй нөхцөлийг өөрөө зохиож болохгүй.
 
-=========================================================
-IV. ҮНИЙН АСУУЛТАД ХАРИУЛАХ ДҮРЭМ
-=========================================================
+ЗУРГИЙН ГОЛ ДҮРЭМ:
+Gemini зураг файлыг өөрөө сонгохгүй.
+Зөвхөн доорх тогтмол IMAGE KEY-үүдээс сонгоно.
+URL, filename, file path зохиож болохгүй.
 
-Хэрэглэгч:
-"Үнэ хэд вэ?"
-гэвэл:
+IMAGE KEY-ҮҮД:
+""" + "\n".join(f"- {k}" for k in IMAGE_KEYS) + """
 
-Мкв үнэ 5.5-5.8 сая ₮ гэж шууд хэл.
+ЗУРГИЙН СОНГОЛТЫН ЖИШЭЭ:
+- "267 м² зураг" / "267 зураг" -> TOWNHOUSE_266
+- "212/213 м² зураг" / "213 зураг" -> TOWNHOUSE_212
+- "126 м² мульт" -> MULT_126
+- "125.21 м² мульт" -> MULT_125
+- "192.25 м² мульт" -> MULT_192
+- "189.64 м² мульт" -> MULT_189_64
+- "136.42 м² мульт" -> MULT_136
+- "178.39 м² мульт" -> MULT_178
+- "198.52 м² мульт" -> MULT_198
+- "126.32 м² мульт" -> MULT_126_32
+- "100.77 м² мульт" -> MULT_100
+- "120.85 м² мульт" -> MULT_120
+- "116 м² мульт" -> MULT_116
+- "ерөнхий төлөвлөгөө" -> GENERAL_PLAN
+- "ногоон байгууламж" / "ногоон цэцэрлэг" -> GREEN_GARDEN
+- "тохижилт" -> LANDSCAPING
+- "амрах талбай" -> RELAXATION_AREA
+- "0-5 насны тоглоомын талбай" -> SPORTS_AREA_0_5
+- "9-13 насны тоглоомын талбай" -> SPORTS_AREA_9_13
+- "13-16 насны тоглоомын талбай" -> SPORTS_AREA_13_16
+- "спортын талбайн төлөвлөгөө" -> SPORTS_AREA_PLAN
+- "мульт хаусын ерөнхий зураг" -> MULT
+- "таун хаусын зураг" -> TOWNHOUSE_266 болон TOWNHOUSE_212 хоёуланг явуулж болно.
+- "мульт хаусын зураг" гэж ерөнхий асуулт бол MULT_126, MULT_125 зэрэг 2-3 тохирох загварын key сонгож болно.
+- "план", "төлөвлөлт" гэж зураг хүсвэл тохирох зураг байгаа үед image_key сонго.
+- Зөвхөн зураг байхгүй төрлийн талаар image key зохиож болохгүй.
 
-Жишээ:
-"Сайн байна уу 😊 Miners Villa-ийн м² үнэ 5,500,000–5,800,000 ₮ байгаа. Таун хаус эсвэл мульт хаусын аль нь сонирхож байгаагаа хэлбэл талбайн мэдээллийг нь өгье."
-
-Хэрэглэгч тодорхой м² асуувал тухайн талбайн мэдээллийг ашигла.
-
-Мэдээллийн санд байхгүй м²-ийн нийт үнийг өөрөө тооцоолж баталгаатай үнэ мэтээр хэлэхгүй.
-
-=========================================================
-V. БОРЛУУЛАЛТЫН ЗӨӨЛӨН ХАНДЛАГА
-=========================================================
-
-Хэрэглэгч сонирхож байгаа нь тодорхой бол дараагийн алхмыг зөөлөн санал болго.
-
-Жишээ:
-
-"Таун хаус сонирхож байна уу, мульт хаус сонирхож байна уу? 😊"
-
-эсвэл:
-
-"Хэрэв хүсвэл борлуулалтын дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаж болно."
-
-эсвэл:
-
-"Та аль төрлийн хаус сонирхож байгаагаа хэлбэл тохирох сонголтыг танилцуулъя 😊"
-
-Гэхдээ БҮХ ХАРИУЛТЫН ТӨГСГӨЛД CTA хийх шаардлагагүй.
-
-=========================================================
-VI. ХЭРЭГЛЭГЧИЙН ХЭЛЛЭГИЙГ ОЙЛГОХ
-=========================================================
-
-Хэрэглэгч:
-- "м2"
-- "мкв"
-- "квадрат"
-- "талбай"
-- "үнэ"
-- "мөнгө"
-- "хэд вэ"
-- "хэдэн төгрөг"
-
-гэх мэт өөр өөр хэлбэрээр асууж болно.
-
-Эдгээрийг утгаар нь ойлгож хариул.
-
-Хэрэглэгч үг, үсгийн алдаатай бичсэн байсан ч боломжтой бол утгыг нь ойлго.
-
-Жишээ:
-"хаус хэд вэ?"
-→ хаусын үнэ эсвэл талбайг асууж байж болно.
-
-Ийм үед шаардлагатай бол:
-"Та хаусын үнэ эсвэл талбайн мэдээллийг асууж байна уу? 😊"
-гэж тодруул.
-
-=========================================================
-VII. ХЭРЭГЛЭГЧИЙГ ШААРДАЖ БОЛОХГҮЙ
-=========================================================
-
-Хэрэглэгчийн:
-- утас
-- регистр
-- хаяг
-- банкны мэдээлэл
-
-зэргийг шаардлагагүй үед асуухгүй.
-
-Хэрэглэгч өөрөө борлуулалтын мэдээлэл авах хүсэлтэй байвал
-9430-7017 дугаарыг өгч болно.
-
-=========================================================
-VIII. ХЭРЭГЛЭГЧ "ХҮНТЭЙ ЯРЬЯ" ГЭВЭЛ
-=========================================================
-
-Хэрэглэгч:
-- "борлуулагчтай ярья"
-- "хүнтэй холбогдъё"
-- "оператор байна уу?"
-- "утас өг"
-- "холбогдох"
-
-гэх мэт хүсэлт гаргавал:
-
-"Мэдээж 😊 Манай борлуулалтын багтай 9430-7017 дугаараар холбогдоорой."
-
-гэж хариул.
-
-=========================================================
-IX. ЗОРИЛГО
-=========================================================
-
-Хэрэглэгчид дарамт үзүүлэхгүй.
-
-Зорилго нь:
-1. Асуултад зөв хариулах
-2. Итгэл төрүүлэх
-3. Miners Villa-ийн сонирхлыг нэмэгдүүлэх
-4. Хэрэглэгчийг шаардлагатай үед борлуулалтын багтай холбох
-
-Борлуулалт хийх гэж хэт шахахгүй.
-
-=========================================================
-X. ХАРИУЛТЫН ФОРМАТ
-=========================================================
-
-Ердийн асуултад:
-2-3 өгүүлбэр.
-
-Маш богино асуултад:
-1-2 өгүүлбэр байж болно.
-
-Жагсаалт шаардлагатай үед bullet ашиглаж болно.
-
-Хэт урт paragraph бүү үүсгэ.
-
-Хариултын төгсгөлд:
-"Хэрэв хүсвэл..."
-"Та сонирхож байвал..."
-гэх мэт үгсийг шаардлагатай үед ашиглаж болно.
-
-Гэхдээ нэг хэвийн давтагдсан CTA бүү ашигла.
-
-=========================================================
-XI. МЭДЭЭЛЭЛИЙН ЭХ СУРВАЛЖ
-=========================================================
-
-Таны үндсэн эх сурвалж бол энэ prompt-д өгөгдсөн Miners Villa мэдээллийн сан.
-
-Өөрийн ерөнхий мэдлэгийг ашиглан Miners Villa-ийн талаар шинэ мэдээлэл зохиож болохгүй.
-
-Хариулт бүр бодит мэдээлэлд үндэслэсэн байх ёстой.
+ЧУХАЛ:
+- Хэрэглэгч зураг хүсээгүй бол image_keys хоосон байна.
+- Нэг хүсэлтэд шаардлагагүй олон зураг бүү явуул.
+- Зөвхөн IMAGE KEY-ээр сонго.
+- Хэрэв эргэлзээтэй бол image_keys=[].
 """
 
+# =========================================================
+# VALIDATION
+# =========================================================
+def check_environment():
+    missing = []
+
+    if not META_PAGE_ACCESS_TOKEN:
+        missing.append("META_PAGE_ACCESS_TOKEN")
+
+    if not GEMINI_API_KEY:
+        missing.append("GEMINI_API_KEY")
+
+    if not IMAGE_BASE_URL:
+        print("WARNING: IMAGE_BASE_URL тохируулаагүй байна.")
+        print("Messenger зураг авахын тулд PUBLIC HTTPS URL шаардлагатай.")
+
+    if missing:
+        print("WARNING: .env дотор дутуу хувьсагч:", ", ".join(missing))
+
+
+check_environment()
+
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # =========================================================
-# GEMINI CLIENT
+# HELPERS
 # =========================================================
+def resolve_photo_file(stem: str) -> Path | None:
+    """photo хавтаснаас өгсөн filename stem-тэй файлыг extension-оос үл хамааран олно."""
+    exact_matches = list(PHOTO_FOLDER.glob(stem + ".*"))
+    if exact_matches:
+        return exact_matches[0]
+    return None
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+
+def get_public_image_url(filename: str) -> str:
+    if not IMAGE_BASE_URL:
+        raise RuntimeError("IMAGE_BASE_URL тохируулаагүй байна.")
+
+    encoded_filename = quote(filename, safe="")
+    return f"{IMAGE_BASE_URL}/{encoded_filename}"
+
+
+def add_to_history(sender_id: str, role: str, text: str):
+    history = CONVERSATIONS.setdefault(sender_id, [])
+    history.append({"role": role, "text": text})
+    if len(history) > MAX_HISTORY:
+        del history[:-MAX_HISTORY]
+
+
+def history_text(sender_id: str) -> str:
+    history = CONVERSATIONS.get(sender_id, [])
+    if not history:
+        return "Өмнөх яриа байхгүй."
+
+    return "\n".join(
+        f"{item['role']}: {item['text']}"
+        for item in history
+    )
 
 
 # =========================================================
-# FACEBOOK MESSENGER MESSAGE SEND
+# FACEBOOK MESSENGER
 # =========================================================
-
-def send_fb_message(recipient_id: str, text: str):
-    """Facebook Messenger API руу хариу мессеж илгээх"""
-
-    url = (
-        f"https://graph.facebook.com/v20.0/me/messages"
+def messenger_url():
+    return (
+        "https://graph.facebook.com/v20.0/me/messages"
         f"?access_token={META_PAGE_ACCESS_TOKEN}"
     )
 
-    payload = {
-        "recipient": {
-            "id": recipient_id
-        },
-        "message": {
-            "text": text
-        }
-    }
 
-    headers = {
-        "Content-Type": "application/json"
+def send_fb_message(recipient_id: str, text: str):
+    if not META_PAGE_ACCESS_TOKEN:
+        print("ERROR: META_PAGE_ACCESS_TOKEN байхгүй.")
+        return
+
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {"text": text},
     }
 
     try:
-        res = requests.post(
-            url,
+        response = requests.post(
+            messenger_url(),
             json=payload,
-            headers=headers
+            headers={"Content-Type": "application/json"},
+            timeout=30,
         )
 
-        print(f"FB Send API Status Code: {res.status_code}")
-        print(f"FB Send API Response Body: {res.text}")
-
-        res.raise_for_status()
+        print("FB TEXT:", response.status_code, response.text)
+        response.raise_for_status()
 
     except Exception as e:
-        print(f"Error sending message to Facebook: {e}")
+        print("Error sending text to Facebook:", e)
 
 
-# =========================================================
-# GEMINI AI RESPONSE
-# =========================================================
+def send_fb_image(recipient_id: str, image_url: str):
+    if not META_PAGE_ACCESS_TOKEN:
+        print("ERROR: META_PAGE_ACCESS_TOKEN байхгүй.")
+        return
 
-def process_ai_response(sender_id: str, user_text: str):
-    """Gemini-ээс хариу аваад Facebook Messenger рүү илгээх"""
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {
+            "attachment": {
+                "type": "image",
+                "payload": {
+                    "url": image_url,
+                    "is_reusable": True,
+                },
+            }
+        },
+    }
 
     try:
+        response = requests.post(
+            messenger_url(),
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
 
-        full_prompt = f"""
+        print("FB IMAGE:", response.status_code, response.text)
+        response.raise_for_status()
+
+    except Exception as e:
+        print("Error sending image to Facebook:", e)
+
+
+def send_images_by_keys(recipient_id: str, image_keys):
+    if not image_keys:
+        return
+
+    # Давхардсан key-ийг арилгана.
+    seen = set()
+
+    for key in image_keys:
+        if key in seen:
+            continue
+        seen.add(key)
+
+        if key not in IMAGE_LIBRARY:
+            print("BLOCKED unknown image key:", key)
+            continue
+
+        stem = IMAGE_LIBRARY[key]
+        local_path = resolve_photo_file(stem)
+
+        if local_path is None or not local_path.is_file():
+            print("IMAGE FILE NOT FOUND FOR KEY:", key, "STEM:", stem)
+            continue
+
+        filename = local_path.name
+
+        try:
+            public_url = get_public_image_url(filename)
+            print("Sending image:", key, public_url)
+            send_fb_image(recipient_id, public_url)
+
+        except Exception as e:
+            print("Image send error:", e)
+
+
+# =========================================================
+# GEMINI
+# =========================================================
+def ask_gemini(sender_id: str, user_text: str):
+    if not client:
+        raise RuntimeError("GEMINI_API_KEY тохируулаагүй байна.")
+
+    prompt = f"""
 {SYSTEM_PROMPT}
 
 =========================================================
-ХЭРЭГЛЭГЧИЙН ОДООГИЙН МЕССЕЖ
+ӨМНӨХ ЯРИАНЫ КОНТЕКСТ
 =========================================================
+{history_text(sender_id)}
 
+=========================================================
+ХЭРЭГЛЭГЧИЙН ШИНЭ МЕССЕЖ
+=========================================================
 {user_text}
 
 =========================================================
-ХАРИУЛТ
+ГАРГАЛТЫН ФОРМАТ
 =========================================================
 
-Дээрх дүрмийг баримтлан хэрэглэгчид шууд илгээх хариултыг бич.
-Зөвхөн хариултыг гарга.
+ЗӨВХӨН JSON буцаа.
+
+Ийм бүтэцтэй байна:
+
+{{
+  "reply": "Хэрэглэгчид илгээх Монгол хэл дээрх богино хариулт",
+  "image_keys": ["IMAGE_KEY"]
+}}
+
+Зураг шаардлагагүй бол:
+
+{{
+  "reply": "Хэрэглэгчид илгээх хариулт",
+  "image_keys": []
+}}
+
+image_keys дотор ЗӨВХӨН prompt-д зөвшөөрсөн IMAGE KEY ашигла.
+Filename, URL, Windows path бүү бич.
 """
 
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=full_prompt
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.3,
+            max_output_tokens=500,
+        ),
+    )
+
+    raw = (response.text or "").strip()
+
+    print("GEMINI RAW:", raw)
+
+    data = json.loads(raw)
+
+    reply = str(data.get("reply", "")).strip()
+    image_keys = data.get("image_keys", [])
+
+    if not isinstance(image_keys, list):
+        image_keys = []
+
+    # Security/accuracy: Gemini зөвшөөрөгдөөгүй key өгсөн бол шууд хасна.
+    valid_keys = [
+        key for key in image_keys
+        if isinstance(key, str) and key in IMAGE_LIBRARY
+    ]
+
+    if not reply:
+        reply = (
+            "Энэ мэдээллийг одоогоор надад өгөөгүй байна. "
+            "Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
         )
 
-        ai_text = response.text.strip()
+    return reply, valid_keys
 
-        print(f"Generated AI Response: {ai_text}")
 
+def process_ai_response(sender_id: str, user_text: str):
+    try:
+        reply, image_keys = ask_gemini(sender_id, user_text)
+
+        print("AI REPLY:", reply)
+        print("AI IMAGE KEYS:", image_keys)
+
+        # History-д AI хариуг хадгална.
+        add_to_history(sender_id, "user", user_text)
+        add_to_history(sender_id, "assistant", reply)
+
+        # Эхлээд текст
+        send_fb_message(sender_id, reply)
+
+        # Дараа нь зураг
+        send_images_by_keys(sender_id, image_keys)
+
+    except json.JSONDecodeError as e:
+        print("Gemini JSON parse error:", e)
+
+        # JSON буруу ирсэн үед хэрэглэгчид raw JSON явуулахгүй.
         send_fb_message(
             sender_id,
-            ai_text
+            "Уучлаарай, түр зуур техникийн алдаа гарлаа. "
+            "Дахин нэг асуугаад үзээрэй 😊"
         )
 
     except Exception as e:
+        print("Error processing AI response:", repr(e))
 
-        print(f"Error processing AI response: {e}")
+        send_fb_message(
+            sender_id,
+            "Уучлаарай, түр зуур техникийн алдаа гарлаа. "
+            "Дахин нэг асуугаад үзээрэй 😊"
+        )
 
 
 # =========================================================
 # META WEBHOOK VERIFICATION
 # =========================================================
-
 @app.get("/webhook")
 async def verify_webhook(request: Request):
-
     params = request.query_params
 
     mode = params.get("hub.mode")
@@ -463,79 +522,89 @@ async def verify_webhook(request: Request):
     challenge = params.get("hub.challenge")
 
     if mode == "subscribe" and token == VERIFY_TOKEN:
-
         return Response(
-            content=challenge,
-            media_type="text/plain"
+            content=challenge or "",
+            media_type="text/plain",
         )
 
     raise HTTPException(
         status_code=403,
-        detail="Verification failed"
+        detail="Verification failed",
     )
 
 
 # =========================================================
 # META WEBHOOK RECEIVE MESSAGE
 # =========================================================
-
 @app.post("/webhook")
 async def handle_webhook(
     request: Request,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
 ):
-
-    data = await request.json()
-
-    if data.get("object") == "page":
-
-        for entry in data.get("entry", []):
-
-            for messaging_event in entry.get("messaging", []):
-
-                if (
-                    messaging_event.get("message")
-                    and not messaging_event["message"].get("is_echo")
-                ):
-
-                    sender_id = messaging_event["sender"]["id"]
-
-                    user_text = messaging_event["message"].get(
-                        "text",
-                        ""
-                    )
-
-                    if user_text:
-
-                        print(
-                            f"Received message from "
-                            f"{sender_id}: {user_text}"
-                        )
-
-                        background_tasks.add_task(
-                            process_ai_response,
-                            sender_id,
-                            user_text
-                        )
-
+    try:
+        data = await request.json()
+    except Exception:
         return Response(
-            content="EVENT_RECEIVED",
-            status_code=200
+            content="INVALID_JSON",
+            status_code=400,
         )
 
+    if data.get("object") != "page":
+        return Response(
+            content="NOT_A_PAGE_EVENT",
+            status_code=404,
+        )
+
+    for entry in data.get("entry", []):
+        for messaging_event in entry.get("messaging", []):
+
+            # Bot өөрийн echo message-ийг дахин боловсруулахгүй.
+            message = messaging_event.get("message")
+
+            if not message:
+                continue
+
+            if message.get("is_echo"):
+                continue
+
+            sender = messaging_event.get("sender", {})
+            sender_id = sender.get("id")
+
+            if not sender_id:
+                continue
+
+            user_text = message.get("text", "").strip()
+
+            if not user_text:
+                # Одоогоор зөвхөн text message боловсруулах хувилбар.
+                continue
+
+            print("=" * 60)
+            print("USER:", sender_id)
+            print("MESSAGE:", user_text)
+            print("=" * 60)
+
+            background_tasks.add_task(
+                process_ai_response,
+                sender_id,
+                user_text,
+            )
+
     return Response(
-        content="NOT_A_PAGE_EVENT",
-        status_code=404
+        content="EVENT_RECEIVED",
+        status_code=200,
     )
 
 
 # =========================================================
 # ROOT
 # =========================================================
-
 @app.get("/")
 async def root():
-
     return {
-        "status": "Bot server is running successfully!"
+        "status": "Miners Villa bot is running",
+        "photo_folder": str(PHOTO_FOLDER),
+        "image_count": len(IMAGE_LIBRARY),
+        "image_base_url_configured": bool(IMAGE_BASE_URL),
+        "gemini_model": GEMINI_MODEL,
     }

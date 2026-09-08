@@ -1,0 +1,5 @@
+.env
+__pycache__/
+*.pyc
+cloudflared.exe
+cloudflared.exe.msi
