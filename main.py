@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import requests
 from pathlib import Path
 from urllib.parse import quote
@@ -65,6 +66,8 @@ IMAGE_LIBRARY = {
 
     # Мульт хаус
     "MULT": "mult",
+    "MULT_PARKING_SPACE": "mult_parking_space",
+"MULT_PARKING_SPACE_1": "mult_parking_space_1",
     "MULT_100": "mult_100",
     "MULT_116": "mult_116",
     "MULT_120": "mult_120",
@@ -150,6 +153,15 @@ SYSTEM_PROMPT = """
 - G — 178.39 м²
 - H — 198.52 м²
 - I — 189.52 м²
+
+Мульт хаус НЭГДСЭН ДУЛААН ЗОГСООЛ:
+- Мульт хаусын Б1 давхарт нэгдсэн дулаан зогсоол байрлана.
+- Зогсоолын үнэ: 50,000,000 ₮.
+- "дулаан зогсоол", "нэгдсэн зогсоол", "Б1 зогсоол", "машины зогсоол" гэж асуувал энэ мэдээллийг ашигла.
+- Зогсоолын план зураг хүсвэл: MULT_PARKING_SPACE
+- Зогсоолын харагдах байдлын зураг хүсвэл: MULT_PARKING_SPACE_1
+- Зогсоолын ерөнхий зураг хүсвэл: MULT_PARKING_SPACE, MULT_PARKING_SPACE_1
+- Зогсоолын үнэ, байршил, зориулалтын талаар prompt-д байхгүй нэмэлт мэдээлэл бүү зохио.
 
 БАЙРШИЛ:
 - Баян-Өндөр уулын зүүн энгэрт
@@ -418,97 +430,68 @@ def ask_gemini(sender_id: str, user_text: str):
 
 ЗӨВХӨН JSON буцаа.
 
-Ийм бүтэцтэй байна:
-
 {{
   "reply": "Хэрэглэгчид илгээх Монгол хэл дээрх богино хариулт",
-  "image_keys": ["IMAGE_KEY"]
-}}
-
-Зураг шаардлагагүй бол:
-
-{{
-  "reply": "Хэрэглэгчид илгээх хариулт",
   "image_keys": []
 }}
 
-image_keys дотор ЗӨВХӨН prompt-д зөвшөөрсөн IMAGE KEY ашигла.
-Filename, URL, Windows path бүү бич.
+ЧУХАЛ:
+- JSON-оос өөр ямар ч текст бүү бич.
+- reply заавал богино, бүтэн өгүүлбэр байна.
+- image_keys дотор зөвхөн зөвшөөрөгдсөн IMAGE KEY ашигла.
+- Filename, URL, Windows path бүү бич.
+- Зураг шаардлагагүй бол image_keys = [] байна.
 """
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.3,
-            max_output_tokens=500,
-        ),
-    )
+    last_error = None
 
-    raw = (response.text or "").strip()
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2,
+                    max_output_tokens=500,
+                ),
+            )
 
-    print("GEMINI RAW:", raw)
+            raw = (response.text or "").strip()
+            print(f"GEMINI RAW (attempt {attempt + 1}):", raw)
 
-    data = json.loads(raw)
+            data = json.loads(raw)
 
-    reply = str(data.get("reply", "")).strip()
-    image_keys = data.get("image_keys", [])
+            reply = str(data.get("reply", "")).strip()
+            image_keys = data.get("image_keys", [])
 
-    if not isinstance(image_keys, list):
-        image_keys = []
+            if not isinstance(image_keys, list):
+                image_keys = []
 
-    # Security/accuracy: Gemini зөвшөөрөгдөөгүй key өгсөн бол шууд хасна.
-    valid_keys = [
-        key for key in image_keys
-        if isinstance(key, str) and key in IMAGE_LIBRARY
-    ]
+            valid_keys = [
+                key for key in image_keys
+                if isinstance(key, str) and key in IMAGE_LIBRARY
+            ]
 
-    if not reply:
-        reply = (
-            "Энэ мэдээллийг одоогоор надад өгөөгүй байна. "
-            "Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
-        )
+            if not reply:
+                reply = (
+                    "Энэ мэдээллийг одоогоор надад өгөөгүй байна. "
+                    "Дэлгэрэнгүй мэдээллийг 9430-7017 дугаараас лавлаарай 😊"
+                )
 
-    return reply, valid_keys
+            return reply, valid_keys
 
+        except Exception as e:
+            last_error = e
+            print(
+                f"GEMINI ERROR (attempt {attempt + 1}/3):",
+                repr(e)
+            )
 
-def process_ai_response(sender_id: str, user_text: str):
-    try:
-        reply, image_keys = ask_gemini(sender_id, user_text)
+            if attempt < 2:
+                time.sleep(2)
 
-        print("AI REPLY:", reply)
-        print("AI IMAGE KEYS:", image_keys)
-
-        # History-д AI хариуг хадгална.
-        add_to_history(sender_id, "user", user_text)
-        add_to_history(sender_id, "assistant", reply)
-
-        # Эхлээд текст
-        send_fb_message(sender_id, reply)
-
-        # Дараа нь зураг
-        send_images_by_keys(sender_id, image_keys)
-
-    except json.JSONDecodeError as e:
-        print("Gemini JSON parse error:", e)
-
-        # JSON буруу ирсэн үед хэрэглэгчид raw JSON явуулахгүй.
-        send_fb_message(
-            sender_id,
-            "Уучлаарай, түр зуур техникийн алдаа гарлаа. "
-            "Дахин нэг асуугаад үзээрэй 😊"
-        )
-
-    except Exception as e:
-        print("Error processing AI response:", repr(e))
-
-        send_fb_message(
-            sender_id,
-            "Уучлаарай, түр зуур техникийн алдаа гарлаа. "
-            "Дахин нэг асуугаад үзээрэй 😊"
-        )
-
+    raise last_error
 
 # =========================================================
 # META WEBHOOK VERIFICATION
