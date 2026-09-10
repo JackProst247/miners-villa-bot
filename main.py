@@ -313,15 +313,11 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
             if size in t:
                 return [key]
 
-    # 5. Мульт хаус ерөнхий зургууд
+    # 5. Мульт хаус ерөнхий зургууд (Дээд тал нь 4 зураг)
     if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "multhouse", "mult house"], t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
         if not match_any(mult_sizes, t):
-            return [
-                "MULT", "MULT_100", "MULT_116", "MULT_120", "MULT_125",
-                "MULT_126", "MULT_126_32", "MULT_136", "MULT_178",
-                "MULT_189", "MULT_189_64", "MULT_192", "MULT_198"
-            ]
+            return ["MULT", "MULT_126", "MULT_189", "MULT_192"]
 
     # 6. Ногоон байгууламж, орчин, тохижилт
     greenery_kws = [
@@ -588,8 +584,11 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
     if not image_keys:
         return
 
+    # Meta-гийн спам санамжаас хамгаалж дээд тал нь 4 зургийг л сонгоно
+    limited_keys = image_keys[:4]
+
     seen = set()
-    for key in image_keys:
+    for key in limited_keys:
         if key in seen:
             continue
         seen.add(key)
@@ -607,7 +606,7 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
         try:
             public_url = get_public_image_url(filename)
             send_fb_image(recipient_id, public_url)
-            time.sleep(1.2)  # Facebook Rate Limit-ээс сэргийлэх 1.2 секунд саатал
+            time.sleep(1.5)  # Facebook Rate Limit-ээс сэргийлэх 1.5 секундийн саатал
         except Exception as e:
             print("Image send error:", repr(e))
 
@@ -639,7 +638,7 @@ def ask_gemini(sender_id: str, user_text: str):
 ГАРГАЛТЫН ФОРМАТ
 =========================================================
 
-ЗӨВХӨН JSON буцаа.
+ЗӨВХӨН JSON буцаа. Нэг дор хамгийн ихдээ 4 хүртэлх зургийн KEY буцаана уу.
 
 {{
     "reply": "Монгол хэл дээрх богино хариулт",
@@ -677,7 +676,7 @@ def ask_gemini(sender_id: str, user_text: str):
             if not reply:
                 reply = UNKNOWN_TEXT
 
-            return reply, valid_keys
+            return reply, valid_keys[:4]  # Дээд тал нь 4-ийг авна
 
         except Exception as e:
             last_error = e
@@ -715,7 +714,7 @@ def process_ai_response(sender_id: str, user_text: str):
             send_fb_message(sender_id, reply)
 
             if image_result:
-                send_images_by_keys(sender_id, image_result)
+                send_images_by_keys(sender_id, image_result[:4])
             return
 
         try:
@@ -729,7 +728,7 @@ def process_ai_response(sender_id: str, user_text: str):
         add_to_history(sender_id, "assistant", reply)
 
         send_fb_message(sender_id, reply)
-        send_images_by_keys(sender_id, image_keys)
+        send_images_by_keys(sender_id, image_keys[:4])
 
     except Exception as e:
         print("Error processing AI response:", repr(e))
