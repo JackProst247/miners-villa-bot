@@ -193,7 +193,7 @@ SYSTEM_PROMPT = """
 * 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр Reel хэлбэрээр шинэчилж хүргэдэг.
 
 ЗУРГИЙН ДҮРЭМ:
-Gemini зөвхөн IMAGE KEY буцаана.
+Gemini зөвхөн IMAGE KEY буцаана. Хамгийн ихдээ 4 хүртэлх KEY буцаана.
 Зөвшөөрөгдсөн IMAGE KEY:
 """ + "\n".join(f"- {k}" for k in IMAGE_KEYS)
 
@@ -313,7 +313,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
             if size in t:
                 return [key]
 
-    # 5. Мульт хаус ерөнхий зургууд (Дээд тал нь 4 зураг)
+    # 5. Мульт хаус ерөнхий зургууд (Дээд тал нь 4)
     if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "multhouse", "mult house"], t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
         if not match_any(mult_sizes, t):
@@ -584,7 +584,7 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
     if not image_keys:
         return
 
-    # Meta-гийн спам санамжаас хамгаалж дээд тал нь 4 зургийг л сонгоно
+    # Спам шүүлтүүрээс хамгаалж хамгийн ихдээ 4 зураг авахаар тохируулав
     limited_keys = image_keys[:4]
 
     seen = set()
@@ -676,7 +676,7 @@ def ask_gemini(sender_id: str, user_text: str):
             if not reply:
                 reply = UNKNOWN_TEXT
 
-            return reply, valid_keys[:4]  # Дээд тал нь 4-ийг авна
+            return reply, valid_keys[:4]
 
         except Exception as e:
             last_error = e
@@ -705,6 +705,7 @@ def process_ai_response(sender_id: str, user_text: str):
         direct_reply = direct_faq_router(user_text, sender_id)
         image_result = direct_image_router(user_text, sender_id)
 
+        # 1. Шууд FAQ хариулт эсвэл Зураг байвал Gemini руу ЯВУУЛАХГҮЙ шууд хариулна!
         if direct_reply or image_result:
             reply = direct_reply if direct_reply else "Мэдээж 😊 Зургийг явууллаа."
 
@@ -715,8 +716,9 @@ def process_ai_response(sender_id: str, user_text: str):
 
             if image_result:
                 send_images_by_keys(sender_id, image_result[:4])
-            return
+            return  # Функц энд дуусна.
 
+        # 2. Дээрх шууд нөхцөлүүдэд таараагүй тохиолдолд л Gemini-аас асууна
         try:
             reply, image_keys = ask_gemini(sender_id, user_text)
         except Exception as gemini_error:
@@ -728,7 +730,8 @@ def process_ai_response(sender_id: str, user_text: str):
         add_to_history(sender_id, "assistant", reply)
 
         send_fb_message(sender_id, reply)
-        send_images_by_keys(sender_id, image_keys[:4])
+        if image_keys:
+            send_images_by_keys(sender_id, image_keys[:4])
 
     except Exception as e:
         print("Error processing AI response:", repr(e))
