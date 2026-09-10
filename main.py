@@ -68,23 +68,17 @@ app.mount(
 # =========================================================
 
 IMAGE_LIBRARY = {
-    # Ерөнхий төлөвлөгөө / орчин
     "GENERAL_PLAN": "general_plan",
     "GREEN_GARDEN": "Green_garden",
     "LANDSCAPING": "landscaping",
     "RELAXATION_AREA": "relaxation_area",
-
-    # Тоглоомын / спортын талбай
     "SPORTS_AREA_0_5": "sports_area_0-5",
     "SPORTS_AREA_9_13": "sports_area_9-13",
     "SPORTS_AREA_13_16": "sports_area_13-16",
     "SPORTS_AREA_PLAN": "sports_area_plan",
-
-    # Мульт хаус
     "MULT": "mult",
     "MULT_PARKING_SPACE": "mult_parking_space",
     "MULT_PARKING_SPACE_1": "mult_parking_space_1",
-
     "MULT_100": "mult_100",
     "MULT_116": "mult_116",
     "MULT_120": "mult_120",
@@ -97,8 +91,6 @@ IMAGE_LIBRARY = {
     "MULT_189_64": "mult_189_64",
     "MULT_192": "mult_192",
     "MULT_198": "mult_198",
-
-    # Таун хаус
     "TOWNHOUSE_212": "townhouse_212",
     "TOWNHOUSE_212_1": "townhouse_212_1",
     "TOWNHOUSE_266": "townhouse_266",
@@ -231,7 +223,6 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 # =========================================================
 
 def normalize_text(text: str) -> str:
-    """Монгол/англи текстийг цэвэрлэж, энгийн хэлбэрт оруулна."""
     text = text.lower().strip()
     text = re.sub(r"[^\w\s]", " ", text)
     replacements = {
@@ -247,7 +238,6 @@ def normalize_text(text: str) -> str:
 
 
 def match_any(keywords: List[str], normalized_text: str) -> bool:
-    """Түлхүүр үгсийн аль нэг нь текст дотор байгаа эсэхийг шалгана."""
     return any(normalize_text(kw) in normalized_text for kw in keywords)
 
 
@@ -280,7 +270,7 @@ def history_text(sender_id: str) -> str:
 
 
 # =========================================================
-# DIRECT IMAGE ROUTER (CONTEXT-AWARE & LATIN SUPPORTED)
+# DIRECT IMAGE ROUTER
 # =========================================================
 
 def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[str]]:
@@ -333,7 +323,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
                 "MULT_189", "MULT_189_64", "MULT_192", "MULT_198"
             ]
 
-    # 6. Ногоон байгууламж, орчин, тохижилт болон спортын талбай
+    # 6. Ногоон байгууламж, орчин, тохижилт
     greenery_kws = [
         "ногоон", "ногоон байгууламж", "ногоон цэцэрлэг", "ногоон орчин", "тохижилт", "гадна тохижилт",
         "амрах талбай", "амралтын талбай", "спортын талбай", "хүүхдийн талбай",
@@ -348,10 +338,9 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         if match_any(["13-16", "13 16", "13-16 нас"], t):
             return ["SPORTS_AREA_13_16"]
         
-        # Ногоон байгууламжтай холбоотой бүх зургуудыг хамтад нь илгээнэ
         return ["GREEN_GARDEN", "LANDSCAPING", "SPORTS_AREA_PLAN", "RELAXATION_AREA"]
 
-    # 7. Ерөнхий төлөвлөгөө / Хотхоны талбай
+    # 7. Ерөнхий төлөвлөгөө
     general_keywords = [
         "талбайн зураг", "талбай зураг", "ерөнхий төлөвлөгөө", "ерөнхий план",
         "план зураг", "план", "төлөвлөлтийн зураг", "төлөвлөлт зураг",
@@ -361,7 +350,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         if not match_any(["таун", "мульт", "зогсоол", "спорт", "тоглоом", "ногоон", "тохижилт", "амрах", "taun", "mult", "zogsool"], t):
             return ["GENERAL_PLAN"]
 
-    # 8. ЯРИАНЫ ТҮҮХЭЭС ЗУРАГ ТАНЬЖ ИЛГЭЭХ
+    # 8. Ярианы түүхээс зураг таньж илгээх
     photo_only_kws = [
         "зураг", "зураг үзье", "зураг харья", "зураг явуул", "зураг илгээ", "зургаа", "зургийг",
         "zurag", "zurag uzei", "zurag uzye", "zurag harya", "zurag yavuul", "zurag ilgee", "zuraguu"
@@ -385,13 +374,13 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
 
 
 # =========================================================
-# DIRECT FAQ ROUTER (LATIN & SHORTCUT SUPPORTED)
+# DIRECT FAQ ROUTER
 # =========================================================
 
 def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     t = normalize_text(user_text)
 
-    # 1. Мэндчилгээ болон ярианы товчлолууд
+    # 1. Мэндчилгээ
     greetings = [
         "сайн уу", "сайн байна уу", "сайн байнуу", "байна уу", "hello", "hi", "hey", "сайн",
         "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain",
@@ -405,7 +394,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "байршлын мэдээлэл өгөхөд бэлэн байна."
         )
 
-    # 2. Зөвхөн "Зураг үзье" гэх мэт товч асуулт
+    # 2. Зөвхөн "Зураг үзье"
     photo_only_kws = [
         "зураг", "зураг үзье", "зураг харья", "зураг явуул", "зураг илгээ", "зургаа", "зургийг",
         "zurag", "zurag uzei", "zurag uzye", "zurag harya", "zurag yavuul", "zurag ilgee", "zuraguu", "zuragaa"
@@ -413,7 +402,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     if match_any(photo_only_kws, t) and len(t.split()) <= 3:
         return "Мэдээж, холбогдох зургуудыг илгээж байна 😊"
 
-    # 3. ҮНЭ (Крилл болон Латин)
+    # 3. Үнэ
     price_keywords = [
         "үнэ", "үнийн", "үнэтэй", "м2 үнэ", "м2", "мкв үнэ", "1м2", "1 м2",
         "квадратын үнэ", "квадрат үнэ", "үнэ хэд", "үнэ хэд вэ", "хэдэн төгрөг",
@@ -427,7 +416,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
                 f"борлуулалтын албаны {SALES_PHONE} дугаараас лавлаарай 😊"
             )
 
-    # 4. Борлуулалтын утас
+    # 4. Утас
     phone_keywords = [
         "утас", "дугаар", "холбогдох", "утасны дугаар", "холбоо барих", "залгах",
         "utas", "dugaar", "holbogdoh", "utasny dugaar", "zalgax", "zalgah"
@@ -435,7 +424,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     if match_any(phone_keywords, t) and not match_any(["оффис", "office"], t):
         return f"Манай борлуулалтын утас: {SALES_PHONE} 😊"
 
-    # 5. Борлуулалтын оффис
+    # 5. Оффис
     office_keywords = [
         "оффис", "хаяг", "оффисын хаяг", "оффис хаана",
         "office", "hayag", "offis", "offis haana"
@@ -468,7 +457,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Газрын бартер зөвшөөрөхгүй."
         return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Машин, газар, бизнесийн бартер зөвшөөрөхгүй."
 
-    # 9. Дулаан зогсоол
+    # 9. Зогсоол
     parking_keywords = [
         "зогсоол", "гарааш", "б1", "дулаан зогсоол", "машины зогсоол",
         "zogsool", "garaash", "b1", "dulaan zogsool"
@@ -476,7 +465,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     if match_any(parking_keywords, t):
         return PARKING_TEXT
 
-    # 10. Сингл / Твин хаус (Борлуулалт дууссан)
+    # 10. Сингл / Твин хаус
     if match_any(["сингл", "твин", "ганц айлын", "хоёр айлын", "single", "twin"], t):
         return (
             "Манай Сингл хаус болон Твин хаусын борлуулалт "
@@ -484,7 +473,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "Мульт хаусын сонголтууд боломжтой байна 😊"
         )
 
-    # 11. Талбайн / мкв сонголтууд
+    # 11. Сонголтууд
     size_keywords = [
         "сонголт", "мкв сонголт", "м2 сонголт", "мкв", "талбайн сонголт", "хэмжээний сонголт", "ямар сонголт",
         "songolt", "songoltuud", "mkv", "m2", "talbain songolt", "yamar songolt", "songolt baigaa yu", "songolt baigaa"
@@ -499,7 +488,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "\"Таунхаус 212 зураг\" эсвэл \"Мульт 126 зураг\" гэж бичээрэй 😊"
         )
 
-    # 12. Мульт хаус ерөнхий
+    # 12. Мульт хаус
     if match_any(["мульт", "мульт хаус", "мультхаус", "mult", "multhouse", "mult house"], t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
         if not match_any(mult_sizes, t):
@@ -509,7 +498,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
                 "136.42 м², 178.39 м², 198.52 м², 189.52 м²"
             )
 
-    # 13. Таун хаус ерөнхий
+    # 13. Таун хаус
     if match_any(["таун", "таун хаус", "таунхаус", "taun", "townhouse", "town house"], t):
         if not match_any(["212", "213", "266", "267"], t):
             return (
@@ -517,7 +506,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
                 "🏡 Талбайн сонголтууд: 213.33 м², 267.48 м²"
             )
 
-    # 14. Барилгын явц болон ашиглалтад орох хугацаа
+    # 14. Явц болон ашиглалтад орох хугацаа
     progress_keywords = [
         "явц", "барилга", "шинэ мэдээ",
         "yavts", "yavc", "barilga", "ywts", "yvst", "ywts n", "yvst n", "ywts yugjin"
@@ -568,36 +557,6 @@ def send_fb_message(recipient_id: str, text: str):
 
 
 def send_fb_image(recipient_id: str, image_url: str):
-
-import time
-
-def send_images_by_keys(recipient_id: str, image_keys: List[str]):
-    if not image_keys:
-        return
-
-    seen = set()
-    for key in image_keys:
-        if key in seen:
-            continue
-        seen.add(key)
-
-        if key not in IMAGE_LIBRARY:
-            continue
-
-        stem = IMAGE_LIBRARY[key]
-        local_path = resolve_photo_file(stem)
-
-        if local_path is None or not local_path.is_file():
-            continue
-
-        filename = local_path.name
-        try:
-            public_url = get_public_image_url(filename)
-            send_fb_image(recipient_id, public_url)
-            time.sleep(1.2)  # Meta спам гэж үзэхээс сэргийлж 1.2 секунд хүлээх
-        except Exception as e:
-            print("Image send error:", repr(e))
-
     if not META_PAGE_ACCESS_TOKEN:
         print("ERROR: META_PAGE_ACCESS_TOKEN байхгүй.")
         return
@@ -636,27 +595,25 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
         seen.add(key)
 
         if key not in IMAGE_LIBRARY:
-            print("BLOCKED unknown image key:", key)
             continue
 
         stem = IMAGE_LIBRARY[key]
         local_path = resolve_photo_file(stem)
 
         if local_path is None or not local_path.is_file():
-            print("IMAGE FILE NOT FOUND FOR KEY:", key, "STEM:", stem)
             continue
 
         filename = local_path.name
         try:
             public_url = get_public_image_url(filename)
-            print("Sending image:", key, public_url)
             send_fb_image(recipient_id, public_url)
+            time.sleep(1.2)  # Facebook Rate Limit-ээс сэргийлэх 1.2 секунд саатал
         except Exception as e:
             print("Image send error:", repr(e))
 
 
 # =========================================================
-# GEMINI
+# GEMINI AI
 # =========================================================
 
 def ask_gemini(sender_id: str, user_text: str):
@@ -746,9 +703,6 @@ def ask_gemini(sender_id: str, user_text: str):
 
 def process_ai_response(sender_id: str, user_text: str):
     try:
-        print("ROUTER CHECK:", user_text)
-
-        # 1. СҮЛЖЭЭНИЙ/ШУУД ЧИГЛҮҮЛЭГҮҮД (FAQ болон Зураг)
         direct_reply = direct_faq_router(user_text, sender_id)
         image_result = direct_image_router(user_text, sender_id)
 
@@ -764,8 +718,6 @@ def process_ai_response(sender_id: str, user_text: str):
                 send_images_by_keys(sender_id, image_result)
             return
 
-        # 2. GEMINI AI
-        print("ROUTER: Gemini ашиглана")
         try:
             reply, image_keys = ask_gemini(sender_id, user_text)
         except Exception as gemini_error:
@@ -829,11 +781,6 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
             if not sender_id or not user_text:
                 continue
-
-            print("=" * 60)
-            print("USER:", sender_id)
-            print("MESSAGE:", user_text)
-            print("=" * 60)
 
             background_tasks.add_task(process_ai_response, sender_id, user_text)
 
