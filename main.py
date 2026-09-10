@@ -231,8 +231,10 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 # =========================================================
 
 def normalize_text(text: str) -> str:
-    """Монгол/англи текстийг энгийн хэлбэрт оруулна."""
+    """Монгол/англи текстийг цэвэрлэж, энгийн хэлбэрт оруулна."""
     text = text.lower().strip()
+    # Цэг, таслал, асуултын тэмдэг гэх мэт тэмдэгтүүдийг цэвэрлэнэ
+    text = re.sub(r"[^\w\s]", " ", text)
     replacements = {
         "ё": "е",
         "өү": "оу",
@@ -241,7 +243,7 @@ def normalize_text(text: str) -> str:
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
-    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
@@ -302,7 +304,7 @@ def direct_image_router(user_text: str) -> Optional[List[str]]:
     if match_any(["213", "212"], t) and match_any(["зураг", "план", "төлөвлөлт", "үзье", "харья", "авья"], t):
         return ["TOWNHOUSE_212", "TOWNHOUSE_212_1"]
 
-    # 3. Таун хаус ерөнхий зургууд (БҮХ зургийг илгээнэ)
+    # 3. Таун хаус ерөнхий зургууд
     if match_any(["таун хаус", "таунхаус", "таун"], t) and match_any(["зураг", "үзье", "харья", "план", "төлөвлөлт", "авья"], t):
         if not match_any(["212", "213", "266", "267"], t):
             return ["TOWNHOUSE_212", "TOWNHOUSE_212_1", "TOWNHOUSE_266", "TOWNHOUSE_266_1"]
@@ -323,7 +325,7 @@ def direct_image_router(user_text: str) -> Optional[List[str]]:
             if size in t and match_any(["зураг", "план", "төлөвлөлт", "үзье", "харья", "авья"], t):
                 return [key]
 
-    # 5. Мульт хаус ерөнхий зургууд (БҮХ зургийг илгээнэ)
+    # 5. Мульт хаус ерөнхий зургууд
     if match_any(["мульт хаус", "мультхаус", "мульт"], t) and match_any(["зураг", "үзье", "харья", "план", "төлөвлөлт", "авья"], t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
         if not match_any(mult_sizes, t):
@@ -378,7 +380,7 @@ def direct_faq_router(user_text: str) -> Optional[str]:
 
     # Мэндчилгээ
     greetings = ["сайн уу", "сайн байна уу", "сайн байнуу", "байна уу", "hello", "hi", "hey"]
-    if t in [normalize_text(g) for g in greetings] or any(t.startswith(normalize_text(g) + " ") for g in greetings):
+    if match_any(greetings, t):
         return (
             "Сайн байна уу? 😊 "
             "Miners Villa төслийн талаар үнэ, "
