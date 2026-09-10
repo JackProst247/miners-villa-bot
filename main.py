@@ -109,7 +109,7 @@ IMAGE_KEYS = list(IMAGE_LIBRARY.keys())
 
 
 # =========================================================
-# SIMPLE CONVERSATION MEMORY
+# CONVERSATION MEMORY
 # =========================================================
 
 CONVERSATIONS: Dict[str, List[Dict[str, str]]] = {}
@@ -280,10 +280,10 @@ def history_text(sender_id: str) -> str:
 
 
 # =========================================================
-# DIRECT IMAGE ROUTER
+# DIRECT IMAGE ROUTER (CONTEXT-AWARE)
 # =========================================================
 
-def direct_image_router(user_text: str) -> Optional[List[str]]:
+def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[str]]:
     t = normalize_text(user_text)
 
     # 1. Зогсоолын зургууд
@@ -293,18 +293,17 @@ def direct_image_router(user_text: str) -> Optional[List[str]]:
             return ["MULT_PARKING_SPACE"]
         if match_any(["харагдах", "гадаад", "үзэмж"], t):
             return ["MULT_PARKING_SPACE_1"]
-        if match_any(["зураг", "үзье", "үзмээр", "харья", "авья"], t):
-            return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
+        return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
 
     # 2. Таун хаус тусгай хэмжээний зургууд
-    if match_any(["267", "266"], t) and match_any(["зураг", "план", "төлөвлөлт", "үзье", "харья", "авья"], t):
+    if match_any(["267", "266"], t):
         return ["TOWNHOUSE_266", "TOWNHOUSE_266_1"]
 
-    if match_any(["213", "212"], t) and match_any(["зураг", "план", "төлөвлөлт", "үзье", "харья", "авья"], t):
+    if match_any(["213", "212"], t):
         return ["TOWNHOUSE_212", "TOWNHOUSE_212_1"]
 
     # 3. Таун хаус ерөнхий зургууд
-    if match_any(["таун хаус", "таунхаус", "таун"], t) and match_any(["зураг", "үзье", "харья", "план", "төлөвлөлт", "авья"], t):
+    if match_any(["таун хаус", "таунхаус", "таун"], t):
         if not match_any(["212", "213", "266", "267"], t):
             return ["TOWNHOUSE_212", "TOWNHOUSE_212_1", "TOWNHOUSE_266", "TOWNHOUSE_266_1"]
 
@@ -321,11 +320,11 @@ def direct_image_router(user_text: str) -> Optional[List[str]]:
     }
     if match_any(["мульт", "мульт хаус", "мультхаус"], t):
         for size, key in mult_image_map.items():
-            if size in t and match_any(["зураг", "план", "төлөвлөлт", "үзье", "харья", "авья"], t):
+            if size in t:
                 return [key]
 
     # 5. Мульт хаус ерөнхий зургууд
-    if match_any(["мульт хаус", "мультхаус", "мульт"], t) and match_any(["зураг", "үзье", "харья", "план", "төлөвлөлт", "авья"], t):
+    if match_any(["мульт хаус", "мультхаус", "мульт"], t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
         if not match_any(mult_sizes, t):
             return [
@@ -335,26 +334,26 @@ def direct_image_router(user_text: str) -> Optional[List[str]]:
             ]
 
     # 6. Ногоон байгууламж / Орчин
-    if match_any(["ногоон байгууламж", "ногоон цэцэрлэг", "ногоон орчин"], t) and match_any(["зураг", "үзье", "харья"], t):
+    if match_any(["ногоон байгууламж", "ногоон цэцэрлэг", "ногоон орчин"], t):
         return ["GREEN_GARDEN"]
 
-    if match_any(["тохижилт"], t) and match_any(["зураг", "үзье", "харья"], t):
+    if match_any(["тохижилт"], t):
         return ["LANDSCAPING"]
 
-    if match_any(["амрах талбай", "амралтын талбай"], t) and match_any(["зураг", "үзье", "харья"], t):
+    if match_any(["амрах талбай", "амралтын талбай"], t):
         return ["RELAXATION_AREA"]
 
     # 7. Хүүхдийн / Спортын талбай
-    if match_any(["0-5", "0 5", "0-5 нас"], t) and match_any(["зураг", "талбай", "үзье", "харья"], t):
+    if match_any(["0-5", "0 5", "0-5 нас"], t):
         return ["SPORTS_AREA_0_5"]
 
-    if match_any(["9-13", "9 13", "9-13 нас"], t) and match_any(["зураг", "талбай", "үзье", "харья"], t):
+    if match_any(["9-13", "9 13", "9-13 нас"], t):
         return ["SPORTS_AREA_9_13"]
 
-    if match_any(["13-16", "13 16", "13-16 нас"], t) and match_any(["зураг", "талбай", "үзье", "харья"], t):
+    if match_any(["13-16", "13 16", "13-16 нас"], t):
         return ["SPORTS_AREA_13_16"]
 
-    if match_any(["спортын талбай"], t) and match_any(["план", "төлөвлөлт", "зураг", "үзье", "харья"], t):
+    if match_any(["спортын талбай"], t):
         return ["SPORTS_AREA_PLAN"]
 
     # 8. Ерөнхий төлөвлөгөө / Хотхоны талбай
@@ -367,14 +366,31 @@ def direct_image_router(user_text: str) -> Optional[List[str]]:
         if not match_any(["таун", "мульт", "зогсоол", "спорт", "тоглоом", "ногоон", "тохижилт", "амрах"], t):
             return ["GENERAL_PLAN"]
 
+    # 9. ЯРИАНЫ ТҮҮХЭЭС ЗУРАГ ТАНЬЖ ИЛГЭЭХ (Зөвхөн "зураг үзье" гэж бичихэд)
+    photo_only_kws = ["зураг", "зураг үзье", "зураг харья", "зураг явуул", "зураг илгээ", "зургаа", "зургийг"]
+    if match_any(photo_only_kws, t):
+        hist_text = normalize_text(history_text(sender_id))
+        if match_any(["таун", "townhouse"], hist_text):
+            if "266" in hist_text or "267" in hist_text:
+                return ["TOWNHOUSE_266", "TOWNHOUSE_266_1"]
+            if "212" in hist_text or "213" in hist_text:
+                return ["TOWNHOUSE_212", "TOWNHOUSE_212_1"]
+            return ["TOWNHOUSE_212", "TOWNHOUSE_212_1", "TOWNHOUSE_266", "TOWNHOUSE_266_1"]
+        if match_any(["мульт", "mult"], hist_text):
+            return ["MULT", "MULT_126", "MULT_189", "MULT_192"]
+        if match_any(["зогсоол", "гарааш"], hist_text):
+            return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
+        
+        return ["GENERAL_PLAN"]
+
     return None
 
 
 # =========================================================
-# DIRECT FAQ ROUTER (ӨРТӨНГӨЙ ЖАГСААЛТ)
+# DIRECT FAQ ROUTER
 # =========================================================
 
-def direct_faq_router(user_text: str) -> Optional[str]:
+def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     t = normalize_text(user_text)
 
     # 1. Мэндчилгээ
@@ -387,14 +403,18 @@ def direct_faq_router(user_text: str) -> Optional[str]:
             "байршлын мэдээлэл өгөхөд бэлэн байна."
         )
 
-    # 2. ҮНЭ (Ганц үгээр болон бүх хэлбэрээр)
+    # 2. Зөвхөн "Зураг үзье" гэх мэт товч асуулт
+    photo_only_kws = ["зураг", "зураг үзье", "зураг харья", "зураг явуул", "зураг илгээ", "зургаа", "зургийг"]
+    if match_any(photo_only_kws, t) and len(t.split()) <= 3:
+        return "Мэдээж, холбогдох зургуудыг илгээж байна 😊"
+
+    # 3. ҮНЭ
     price_keywords = [
         "үнэ", "үнийн", "үнэтэй", "м2 үнэ", "м2", "мкв үнэ", "1м2", "1 м2",
         "квадратын үнэ", "квадрат үнэ", "үнэ хэд", "үнэ хэд вэ", "хэдэн төгрөг",
         "унэ", "унийн"
     ]
     if match_any(price_keywords, t):
-        # Хэрэв зөвхөн хэмжээний сонголт асууж байгаа бол мкв рүү оруулна
         if not match_any(["сонголт", "хэмжээ", "ямар ямар"], t) or match_any(["үнэ"], t):
             return (
                 "Одоогийн м² үнэ 5,500,000–5,800,000 ₮ байна. "
@@ -402,27 +422,27 @@ def direct_faq_router(user_text: str) -> Optional[str]:
                 f"борлуулалтын албаны {SALES_PHONE} дугаараас лавлаарай 😊"
             )
 
-    # 3. Борлуулалтын утас
+    # 4. Борлуулалтын утас
     phone_keywords = ["утас", "дугаар", "холбогдох", "утасны дугаар", "холбоо барих", "залгах"]
     if match_any(phone_keywords, t) and not match_any(["оффис"], t):
         return f"Манай борлуулалтын утас: {SALES_PHONE} 😊"
 
-    # 4. Борлуулалтын оффис
+    # 5. Борлуулалтын оффис
     office_keywords = ["оффис", "хаяг", "оффисын хаяг", "оффис хаана"]
     if match_any(office_keywords, t):
         return f"Борлуулалтын оффис: {SALES_OFFICE}. Утас: {SALES_PHONE} 😊"
 
-    # 5. Байршил
+    # 6. Байршил
     location_keywords = ["байршил", "байрлал", "хаана байдаг", "хаана вэ", "хаана байрладаг", "хаана байрлах", "хотын хаана"]
     if match_any(location_keywords, t):
         return f"Miners Villa нь {LOCATION_TEXT}. Дэлгэрэнгүй мэдээллийг {SALES_PHONE} дугаараас лавлаарай 😊"
 
-    # 6. Төлбөрийн нөхцөл
+    # 7. Төлбөрийн нөхцөл
     payment_keywords = ["төлбөр", "төлбөрийн нөхцөл", "төлөлтийн нөхцөл", "хэрхэн төлөх", "яаж төлөх", "урьдчилгаа", "хэдэн хувь"]
     if match_any(payment_keywords, t) and not match_any(["бартер"], t):
         return f"Төлбөрийн нөхцөл: {PAYMENT_TEXT} Явцын төлбөрт зөвхөн байрны бартер сонсоно."
 
-    # 7. Бартер
+    # 8. Бартер
     barter_keywords = ["бартер", "байраар", "машинаар", "газраар"]
     if match_any(barter_keywords, t):
         if match_any(["машин", "машинаар"], t):
@@ -431,12 +451,12 @@ def direct_faq_router(user_text: str) -> Optional[str]:
             return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Газрын бартер зөвшөөрөхгүй."
         return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Машин, газар, бизнесийн бартер зөвшөөрөхгүй."
 
-    # 8. Дулаан зогсоол
+    # 9. Дулаан зогсоол
     parking_keywords = ["зогсоол", "гарааш", "б1", "дулаан зогсоол", "машины зогсоол"]
     if match_any(parking_keywords, t):
         return PARKING_TEXT
 
-    # 9. Сингл / Твин хаус (Борлуулалт дууссан)
+    # 10. Сингл / Твин хаус (Борлуулалт дууссан)
     if match_any(["сингл", "твин", "ганц айлын", "хоёр айлын"], t):
         return (
             "Манай Сингл хаус болон Твин хаусын борлуулалт "
@@ -444,7 +464,7 @@ def direct_faq_router(user_text: str) -> Optional[str]:
             "Мульт хаусын сонголтууд боломжтой байна 😊"
         )
 
-    # 10. Талбайн / мкв сонголтууд
+    # 11. Талбайн / мкв сонголтууд
     size_keywords = ["сонголт", "мкв сонголт", "м2 сонголт", "мкв", "талбайн сонголт", "хэмжээний сонголт", "ямар сонголт"]
     if match_any(size_keywords, t) and not match_any(["таун", "мульт"], t):
         return (
@@ -456,7 +476,7 @@ def direct_faq_router(user_text: str) -> Optional[str]:
             "\"Таунхаус 212 зураг\" эсвэл \"Мульт 126 зураг\" гэж бичээрэй 😊"
         )
 
-    # 11. Мульт хаус ерөнхий
+    # 12. Мульт хаус ерөнхий
     if match_any(["мульт", "мульт хаус", "мультхаус"], t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
         if not match_any(mult_sizes, t):
@@ -466,7 +486,7 @@ def direct_faq_router(user_text: str) -> Optional[str]:
                 "136.42 м², 178.39 м², 198.52 м², 189.52 м²"
             )
 
-    # 12. Таун хаус ерөнхий
+    # 13. Таун хаус ерөнхий
     if match_any(["таун", "таун хаус", "таунхаус"], t):
         if not match_any(["212", "213", "266", "267"], t):
             return (
@@ -474,14 +494,14 @@ def direct_faq_router(user_text: str) -> Optional[str]:
                 "🏡 Талбайн сонголтууд: 213.33 м², 267.48 м²"
             )
 
-    # 13. Барилгын явц болон ашиглалтад орох хугацаа
+    # 14. Барилгын явц болон ашиглалтад орох хугацаа
     if match_any(["явц", "барилга", "шинэ мэдээ"], t):
         return "Барилгын явцыг 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр Reel хэлбэрээр шинэчилж хүргэдэг."
 
     if match_any(["ашиглалт", "хэзээ орох", "хэзээ дуусах"], t):
         return "2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна."
 
-    # 14. Ажилтантай холбогдох
+    # 15. Ажилтантай холбогдох
     if match_any(["хүнтэй", "менежер", "ажилтан"], t):
         return f"😊 Манай борлуулалтын албатай {SALES_PHONE} дугаараар холбогдоорой."
 
@@ -671,8 +691,8 @@ def process_ai_response(sender_id: str, user_text: str):
         print("ROUTER CHECK:", user_text)
 
         # 1. СҮЛЖЭЭНИЙ/ШУУД ЧИГЛҮҮЛЭГҮҮД (FAQ болон Зураг)
-        direct_reply = direct_faq_router(user_text)
-        image_result = direct_image_router(user_text)
+        direct_reply = direct_faq_router(user_text, sender_id)
+        image_result = direct_image_router(user_text, sender_id)
 
         if direct_reply or image_result:
             reply = direct_reply if direct_reply else "Мэдээж 😊 Зургийг явууллаа."
@@ -686,7 +706,7 @@ def process_ai_response(sender_id: str, user_text: str):
                 send_images_by_keys(sender_id, image_result)
             return
 
-        # 2. GEMINI AI (Сүлжээний чиглүүлэгт таараагүй бусад асуултад)
+        # 2. GEMINI AI
         print("ROUTER: Gemini ашиглана")
         try:
             reply, image_keys = ask_gemini(sender_id, user_text)
