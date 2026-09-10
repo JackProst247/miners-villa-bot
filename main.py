@@ -568,6 +568,36 @@ def send_fb_message(recipient_id: str, text: str):
 
 
 def send_fb_image(recipient_id: str, image_url: str):
+
+import time
+
+def send_images_by_keys(recipient_id: str, image_keys: List[str]):
+    if not image_keys:
+        return
+
+    seen = set()
+    for key in image_keys:
+        if key in seen:
+            continue
+        seen.add(key)
+
+        if key not in IMAGE_LIBRARY:
+            continue
+
+        stem = IMAGE_LIBRARY[key]
+        local_path = resolve_photo_file(stem)
+
+        if local_path is None or not local_path.is_file():
+            continue
+
+        filename = local_path.name
+        try:
+            public_url = get_public_image_url(filename)
+            send_fb_image(recipient_id, public_url)
+            time.sleep(1.2)  # Meta спам гэж үзэхээс сэргийлж 1.2 секунд хүлээх
+        except Exception as e:
+            print("Image send error:", repr(e))
+
     if not META_PAGE_ACCESS_TOKEN:
         print("ERROR: META_PAGE_ACCESS_TOKEN байхгүй.")
         return
