@@ -134,7 +134,7 @@ PAYMENT_TEXT = (
 )
 
 PARKING_TEXT = (
-    "Мульт хаусын Б1 болон 1-р давхарт нэгдсэн дуلاан зогсоол байрлана. "
+    "Мульт хаусын Б1 болон 1-р давхарт нэгдсэн дулаан зогсоол байрлана. "
     "Зогсоолын үнэ 50,000,000 ₮."
 )
 
@@ -230,19 +230,17 @@ def normalize_text(text: str) -> str:
     text = text.lower().strip()
     text = re.sub(r"[^\w\s]", " ", text)
     
-    # Латин галиг болон крилл үсгийн хөрвүүлэлт
     replacements = {
         "ё": "е",
         "өү": "оу",
         "ү": "у",
         "ө": "о",
-        "v": "u",  # vne -> une, vniin -> uniin, vnetei -> unetei
-        "w": "v",  # ywts -> yvts
+        "v": "u",
+        "w": "v",
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
         
-    # Нийтлэг ашигладаг товчлолуудыг бүтэн үг болгох
     word_replacements = {
         "mdll": "medeelel",
         "mdlel": "medeelel",
@@ -319,7 +317,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
     if match_any(["213", "212"], t):
         return ["TOWNHOUSE_212", "TOWNHOUSE_212_1"]
 
-    # 3. Таун хаус ерөнхий зургууд (Бүх төрлийн бичлэгүүд)
+    # 3. Таун хаус ерөнхий зургууд
     townhouse_kws = [
         "таун хаус", "таунхаус", "таун", "taun", "townhouse", "town house",
         "таун-хаус", "taunhaus", "taun haus", "taun havs", "town-house", "town", "tawn"
@@ -328,7 +326,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         if not match_any(["212", "213", "266", "267"], t):
             return ["TOWNHOUSE_212", "TOWNHOUSE_212_1", "TOWNHOUSE_266", "TOWNHOUSE_266_1"]
 
-    # 4. Мульт хаус тусгай хэмжээний зургууд (Сонирхсон загварыг ерөнхий MULT зурагтай хамт)
+    # 4. Мульт хаус тусгай хэмжээний зургууд
     mult_image_map = {
         "126.32": "MULT_126_32", "126,32": "MULT_126_32", "126": "MULT_126",
         "125.21": "MULT_125", "125,21": "MULT_125", "120.85": "MULT_120",
@@ -348,7 +346,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
             if size in t:
                 return ["MULT", key]
 
-    # 5. Мульт хаус ерөнхий асуух үед (Зөвхөн ерөнхий MULT зураг)
+    # 5. Мульт хаус ерөнхий
     if match_any(mult_kws, t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
         if not match_any(mult_sizes, t):
@@ -385,7 +383,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         if not match_any(["таун", "мульт", "зогсоол", "спорт", "тоглоом", "ногоон", "тохижилт", "амрах", "taun", "mult", "zogsool"], t):
             return ["GENERAL_PLAN"]
 
-    # 8. Ярианы түүхээс зураг таньж илгээх
+    # 8. Ярианы түүхээс зураг таних
     photo_only_kws = [
         "зураг", "зураг үзье", "зураг харья", "зураг явуул", "зураг илгээ", "зургаа", "зургийг",
         "zurag", "zurag uzei", "zurag uzye", "zurag harya", "zurag yavuul", "zurag ilgee", "zuraguu", 
@@ -507,7 +505,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Газрын бартер зөвшөөрөхгүй."
         return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Машин, газар, бизнесийн бартер зөвшөөрөхгүй."
 
-    # 9. Зогсоол (Б1 болон 1-р давхарт)
+    # 9. Зогсоол
     parking_keywords = [
         "зогсоол", "гарааш", "б1", "дулаан зогсоол", "машины зогсоол",
         "zogsool", "garaash", "b1", "dulaan zogsool", "гараж", "гараш", "garaj", "zgsol", "1 davhar", "1-р давхар"
@@ -540,7 +538,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "\"Таунхаус 212 зураг\" эсвэл \"Мульт 126 зураг\" гэж бичээрэй 😊"
         )
 
-    # 12. Мульт хаус (Онцлог + м2 сонголт асуух)
+    # 12. Мульт хаус
     mult_kws = ["мульт", "мульт хаус", "мультхаус", "mult", "multhouse", "mult house", "мулт", "мултхаус", "мулт хаус", "mult-house", "mult havs"]
     if match_any(mult_kws, t):
         mult_sizes = ["100", "116", "120", "125", "126", "136", "178", "189", "192", "198"]
@@ -560,7 +558,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
                 "• 198.52 м²"
             )
 
-    # 13. Таун хаус (Онцлог + м2 сонголтууд)
+    # 13. Таун хаус
     townhouse_kws = [
         "таун", "таун хаус", "таунхаус", "taun", "townhouse", "town house",
         "таун-хаус", "taunhaus", "taun haus", "taun havs", "town-house", "town", "tawn"
@@ -596,7 +594,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     if match_any(staff_kws, t):
         return f"😊 Манай борлуулалтын албатай {SALES_PHONE} дугаараар холбогдоорой."
 
-    # 16. Ерөнхий мэдээлэл хүсэх
+    # 16. Ерөнхий мэдээлэл
     info_keywords = [
         "мэдээлэл", "дэлгэрэнгүй", "мэдээлэл авъя", "төслийн мэдээлэл", "танилцуулга",
         "medeelel", "delgerengui", "taniltsuulga", "info", "information", "medeelel avya", "medee", "mdll", "mdlel"
@@ -614,7 +612,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
 
 
 # =========================================================
-# FACEBOOK MESSENGER
+# FACEBOOK MESSENGER (CAROUSEL & ERROR-SAFE)
 # =========================================================
 
 def messenger_url():
@@ -636,27 +634,57 @@ def send_fb_message(recipient_id: str, text: str):
             messenger_url(),
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=30,
+            timeout=10,
         )
         print("FB TEXT:", response.status_code, response.text)
-        response.raise_for_status()
     except Exception as e:
         print("Error sending text to Facebook:", repr(e))
 
 
-def send_fb_image(recipient_id: str, image_url: str):
-    if not META_PAGE_ACCESS_TOKEN:
-        print("ERROR: META_PAGE_ACCESS_TOKEN байхгүй.")
+def send_images_by_keys(recipient_id: str, image_keys: List[str]):
+    """
+    Олон зургийг тус тусад нь цувуулж илгээх биш, Meta Carousel (Generic Template)
+    ашиглан НЭГ удаагийн API дуудлагаар аюулгүй илгээнэ.
+    """
+    if not image_keys or not META_PAGE_ACCESS_TOKEN:
         return
 
+    elements = []
+    seen = set()
+
+    for key in image_keys[:4]:
+        if key in seen or key not in IMAGE_LIBRARY:
+            continue
+        seen.add(key)
+
+        stem = IMAGE_LIBRARY[key]
+        local_path = resolve_photo_file(stem)
+
+        if local_path and local_path.is_file():
+            try:
+                public_url = get_public_image_url(local_path.name)
+                elements.append({
+                    "title": f"Miners Villa - {key}",
+                    "image_url": public_url
+                })
+            except Exception as e:
+                print("Image URL resolution error:", e)
+
+    if not elements:
+        return
+
+    # Meta-ийн Generic Carousel формат
     payload = {
         "recipient": {"id": recipient_id},
         "message": {
             "attachment": {
-                "type": "image",
-                "payload": {"url": image_url, "is_reusable": True},
+                "type": "template",
+                "payload": {
+                    "template_type": "generic",
+                    "elements": elements
+                }
             }
-        },
+        }
     }
 
     try:
@@ -664,42 +692,11 @@ def send_fb_image(recipient_id: str, image_url: str):
             messenger_url(),
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=30,
+            timeout=10,
         )
-        print("FB IMAGE:", response.status_code, response.text)
-        response.raise_for_status()
+        print("FB CAROUSEL:", response.status_code, response.text)
     except Exception as e:
-        print("Error sending image to Facebook:", repr(e))
-
-
-def send_images_by_keys(recipient_id: str, image_keys: List[str]):
-    if not image_keys:
-        return
-
-    limited_keys = image_keys[:4]
-
-    seen = set()
-    for key in limited_keys:
-        if key in seen:
-            continue
-        seen.add(key)
-
-        if key not in IMAGE_LIBRARY:
-            continue
-
-        stem = IMAGE_LIBRARY[key]
-        local_path = resolve_photo_file(stem)
-
-        if local_path is None or not local_path.is_file():
-            continue
-
-        filename = local_path.name
-        try:
-            public_url = get_public_image_url(filename)
-            send_fb_image(recipient_id, public_url)
-            time.sleep(1.5)
-        except Exception as e:
-            print("Image send error:", repr(e))
+        print("Error sending Carousel to Facebook:", repr(e))
 
 
 # =========================================================
@@ -796,7 +793,7 @@ def process_ai_response(sender_id: str, user_text: str):
         direct_reply = direct_faq_router(user_text, sender_id)
         image_result = direct_image_router(user_text, sender_id)
 
-        # 1. Шууд FAQ хариулт эсвэл Зураг байвал Gemini руу явуулахгүй шууд хариулна
+        # 1. Шууд FAQ хариулт эсвэл Зураг байвал Gemini руу явуулахгүй
         if direct_reply or image_result:
             reply = direct_reply if direct_reply else "Мэдээж 😊 Зургийг явууллаа."
 
@@ -809,7 +806,7 @@ def process_ai_response(sender_id: str, user_text: str):
                 send_images_by_keys(sender_id, image_result[:4])
             return
 
-        # 2. Шууд нөхцөлд таараагүй үед Gemini AI-аас асууна
+        # 2. Gemini AI
         try:
             reply, image_keys = ask_gemini(sender_id, user_text)
         except Exception as gemini_error:
