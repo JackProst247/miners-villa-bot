@@ -645,7 +645,6 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
     """
     Олон зургийг тус тусад нь цувуулж илгээх биш, Meta Carousel (Generic Template)
     ашиглан НЭГ удаагийн API дуудлагаар аюулгүй илгээнэ.
-    Мөн зураг бүр дээр "Томруулж харах" товч нэмсэн.
     """
     if not image_keys or not META_PAGE_ACCESS_TOKEN:
         return
@@ -666,14 +665,7 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
                 public_url = get_public_image_url(local_path.name)
                 elements.append({
                     "title": f"Miners Villa - {key}",
-                    "image_url": public_url,
-                    "buttons": [
-                        {
-                            "type": "web_url",
-                            "url": public_url,
-                            "title": "🔍 Томруулж харах"
-                        }
-                    ]
+                    "image_url": public_url
                 })
             except Exception as e:
                 print("Image URL resolution error:", e)
