@@ -373,8 +373,9 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     # 1. Мэндчилгээ
     greetings = [
         "сайн уу", "сайн байна уу", "сайн байнуу", "байна уу", "hello", "сайн",
-        "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain",
+        "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain", "sainuu", 
         "snu", "snuu", "snuuu", "sn uu", "sn u", "u bn", "u baina", "uu bn", "sain u",
+        "bnu", "bnuu", "bn uu", "bna uu", "bainuu", "bn",
         "өглөөний мэнд", "өдрийн мэнд", "оройн мэнд", "mends", "mend", "helloo", 
         "uglooni mend", "udriin mend", "oroin mend", "сну", "снуу", "ёну"
     ]
