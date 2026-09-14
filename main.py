@@ -376,17 +376,17 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
         "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain",
         "snu", "snuu", "snuuu", "sn uu", "sn u", "u bn", "u baina", "uu bn", "sain u",
         "өглөөний мэнд", "өдрийн мэнд", "оройн мэнд", "mends", "mend", "helloo", 
-        "uglooni mend", "udriin mend", "oroin mend"
+        "uglooni mend", "udriin mend", "oroin mend", "сну", "снуу", "ёну"
     ]
     # "hi", "hey" зэрэг богино үгсийг зөвхөн салангид үг байвал л танихаар болголоо
     exact_greetings = ["hi", "hiii", "hey", "мэнд"]
 
     if (match_any(greetings, t) or any(w in t.split() for w in exact_greetings)) and len(t.split()) <= 4 and not match_any(["үнэ", "une", "vne", "утас", "utas", "байршил", "bairshil", "ywts", "yvts", "ashiglalt", "ашиглалт", "хэзээ", "hezee", "oroh"], t):
         return (
-            "Сайн байна уу? 😊 "
+            "😊 Сайн байна уу? Манай төслийг сонирхон холбогдсон танд баярлалаа! Намайг Мина гэдэг. 🥰  "
             "Miners Villa төслийн талаар үнэ, "
             "төлөвлөлт, төлбөрийн нөхцөл болон "
-            "байршлын мэдээлэл өгөхөд бэлэн байна."
+            "байршлын талаар дэлгэрэнгүй мэдээлэл өгөхөд бэлэн байна."
         )
 
     # 2. МКВ шууд бичих үеийн тайлбарууд (Зурагтай хамт явах текст)
