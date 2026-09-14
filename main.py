@@ -371,8 +371,17 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     t = normalize_text(user_text)
 
     # 1. Мэндчилгээ
-    greetings = ["сайн уу", "сайн байна уу", "сайн байнуу", "байна уу", "hello", "hi", "hey", "сайн", "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain", "snu", "snuu", "snuuu", "sn uu", "sn u", "u bn", "u baina", "uu bn", "sain u", "өглөөний мэнд", "өдрийн мэнд", "оройн мэнд", "mends", "mend", "helloo", "hiii", "uglooni mend", "udriin mend", "oroin mend"]
-    if match_any(greetings, t) and len(t.split()) <= 4 and not match_any(["үнэ", "une", "vne", "утас", "utas", "байршил", "bairshil", "ywts", "yvts"], t):
+    greetings = [
+        "сайн уу", "сайн байна уу", "сайн байнуу", "байна уу", "hello", "сайн",
+        "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain",
+        "snu", "snuu", "snuuu", "sn uu", "sn u", "u bn", "u baina", "uu bn", "sain u",
+        "өглөөний мэнд", "өдрийн мэнд", "оройн мэнд", "mends", "mend", "helloo", 
+        "uglooni mend", "udriin mend", "oroin mend"
+    ]
+    # "hi", "hey" зэрэг богино үгсийг зөвхөн салангид үг байвал л танихаар болголоо
+    exact_greetings = ["hi", "hiii", "hey", "мэнд"]
+
+    if (match_any(greetings, t) or any(w in t.split() for w in exact_greetings)) and len(t.split()) <= 4 and not match_any(["үнэ", "une", "vne", "утас", "utas", "байршил", "bairshil", "ywts", "yvts", "ashiglalt", "ашиглалт", "хэзээ", "hezee", "oroh"], t):
         return (
             "Сайн байна уу? 😊 "
             "Miners Villa төслийн талаар үнэ, "
@@ -411,7 +420,20 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     office_keywords = ["оффис", "хаяг", "оффисын хаяг", "оффис хаана", "office", "hayag", "offis", "offis haana", "оффис хаана вэ", "хаяг хаана вэ", "hayag haana ve", "offis haana ve", "haana ochihiin", "ochih"]
     if match_any(office_keywords, t):
         return f"Борлуулалтын оффис: {SALES_OFFICE}. Утас: {SALES_PHONE} 😊"
-
+    # 6.5 Ажлын цаг
+    working_hours_keywords = [
+        "цаг", "ажиллах цаг", "ажлын цаг", "хэдээс", "хэд хүртэл", "онгойх", "хаах",
+        "tsag", "ajliin tsag", "ajillah tsag", "hedees", "hed hurtel", "ongoidog", "haadag"
+    ]
+    if match_any(working_hours_keywords, t) and not match_any(["хэзээ орох", "hezee oroh"], t):
+        return f"Манай борлуулалтын оффис өдөр бүр 09:00 - 18:00 цагийн хооронд ажиллаж байна. Та {SALES_PHONE} дугаараар мөн холбогдох боломжтой 😊"
+    # 6.6 Талбайтай танилцах / Байр үзэх
+    visit_keywords = [
+        "танилцах", "үзэх", "очиж үзэх", "талбайтай танилцах", "байраа үзэх", "захиалсан байраа",
+        "taniltsah", "uzeh", "ochij uzeh", "talbaitai taniltsah", "bairaa uzeh", "zahialsan bairaa"
+    ]
+    if match_any(visit_keywords, t) and not match_any(["зураг", "zurag", "plan"], t):
+        return "Төслийн талбайтай танилцахдаа борлуулалтын албатай холбогдож, ажлын өдрүүдээр цайны цагаар буюу 13:00-14:00 цагийн хооронд танилцах боломжтой 😊"
     # 7. Байршил
     location_keywords = ["байршил", "байрлал", "хаана байдаг", "хаана вэ", "хаана байрладаг", "хаана байрлах", "хотын хаана", "bairshil", "bairlal", "haana baidag", "haana ve", "haana bairladag", "haana", "brshil", "байршил хаана вэ", "haana bairlaj baigaa ve", "haana bairlah ve", "bairlal haana ve", "bairshil n"]
     if match_any(location_keywords, t):
@@ -466,11 +488,11 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "Дараах сонголтуудаас бичвэл бид тухайн загварын дэлгэрэнгүй зураг болон мэдээллийг илгээх болно:\n\n"
             "🏢 Сонголтууд:\n"
             "• 125.21 м² \n"  
-            "126 м²\n"
+            "• 126 м²\n"
             "• 136.42 м²\n"
             "• 178.39 м²\n"
             "• 189.52 м²,\n"
-            "•189.64 м²\n"
+            "• 189.64 м²\n"
             "• 192.25 м²\n"
             "• 198.52 м²"
         )
@@ -494,17 +516,21 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     if match_any(progress_keywords, t):
         return "Барилгын явцыг 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр Reel хэлбэрээр шинэчилж хүргэдэг 😊"
 
-    completion_keywords = ["ашиглалт", "хэзээ орох", "хэзээ дуусах", "ashiglalt", "hezee oroh", "hezee duusah", "хэзээ орох вэ", "hezee ashiglaltand", "ashiglaltand oroh", "hezee orhiin", "oroh hugatsaa"]
+    completion_keywords = [
+        "ашиглалт", "хэзээ орох", "хэзээ дуусах", "ashiglalt", "ashiglaltad", "ashiglaltand", 
+        "hezee oroh", "hezee duusah", "хэзээ орох вэ", "hezee oroh ve", "hezee oroh uu", 
+        "hezee oroh we", "hezee orhiin", "oroh hugatsaa", "orox", "хэзээ ашиглалтанд"
+    ]
     if match_any(completion_keywords, t):
         return "2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна."
-
+    
     # 16. Ажилтантай холбогдох
     staff_kws = ["хүнтэй", "менежер", "ажилтан", "huntei", "manager", "ajiltan", "админ", "admin", "menejer", "bortai holbogdoh"]
     if match_any(staff_kws, t):
-        return f"😊 Манай борлуулалтын албатай {SALES_PHONE} дугаараар холбогдоорой."
+        return f"😊 Та манай борлуулалтын албатай {SALES_PHONE} дугаараар холбогдох боломжтой."
 
     # 17. Ерөнхий мэдээлэл
-    info_keywords = ["мэдээлэл", "дэлгэрэнгүй", "мэдээлэл авъя", "төслийн мэдээлэл", "танилцуулга", "medeelel", "delgerengui", "taniltsuulga", "info", "information", "medeelel avya", "medee", "mdll", "mdlel"]
+    info_keywords = ["мэдээлэл", "дэлгэрэнгүй", "мэдээлэл авъя", "төслийн мэдээлэл", "танилцуулга", "medeelel", "delgerengui", "taniltsuulga", "info", "information", "medeelel avya", "medee", "mdll", "mdlel", "medeelel avya", "mdleel", "medeelel avya", "mdleel avya", "mdlel avya", "mdl avya", "avya", "сонирхож байна", "sonirkh", "sonirkhoj bna", "sonirhoj bna", "sonirhoj", "sonrhj"]
     if match_any(info_keywords, t) and len(t.split()) <= 4:
         return (
             "Miners Villa төсөл нь Эрдэнэт хотод сүндэрлэж буй 30.8 га талбайг хамарсан тансаг зэрэглэлийн хотхон юм. 🏡\n\n"
