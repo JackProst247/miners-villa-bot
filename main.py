@@ -382,7 +382,9 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
         "snu", "snuu", "snuuu", "sn uu", "sn u", "u bn", "u baina", "uu bn", "sain u",
         "bnu", "bnuu", "bn uu", "bna uu", "bainuu", "bn",
         "өглөөний мэнд", "өдрийн мэнд", "оройн мэнд", "mends", "mend", "helloo", 
-        "uglooni mend", "udriin mend", "oroin mend", "сну", "снуу", "ёну"
+        "uglooni mend", "udriin mend", "oroin mend", "сну", "снуу", "ёну",
+        "udrin mend", "udriin mnd", "udrin mnd", "ugluunii mnd", "ugluni mend", 
+        "oroinii mend", "oroin mnd", "mnd"
     ]
     # "hi", "hey" зэрэг богино үгсийг зөвхөн салангид үг байвал л танихаар болголоо
     exact_greetings = ["hi", "hiii", "hey", "мэнд"]
