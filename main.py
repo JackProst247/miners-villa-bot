@@ -571,7 +571,14 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
                 public_url = get_public_image_url(local_path.name)
                 elements.append({
                     "title": f"Miners Villa - {key.replace('_', ' ')}",
-                    "image_url": public_url
+                    "image_url": public_url,
+                    "buttons": [
+                        {
+                            "type": "web_url",
+                            "url": public_url,
+                            "title": "🔍 Томруулж харах"
+                        }
+                    ]
                 })
             except Exception as e:
                 print("Image URL resolution error:", e)
@@ -602,7 +609,6 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
         print("FB CAROUSEL:", response.status_code, response.text)
     except Exception as e:
         print("Error sending Carousel to Facebook:", repr(e))
-
 
 # =========================================================
 # GEMINI AI (СҮҮЛИЙН АРГА / УУРТАЙ БОЛОН АЛДААТАЙ БИЧВЭР ДЭЭР)
