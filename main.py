@@ -546,7 +546,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     info_keywords = [
         "мэдээлэл", "дэлгэрэнгүй", "мэдээлэл авъя", "төслийн мэдээлэл", "танилцуулга", 
         "medeelel", "delgerengui", "taniltsuulga", "info", "information", "medeelel avya", 
-        "medee", "mdll", "mdlel", "уурхайчин", "uurhaichin", 
+        "medee", "mdll", "mdlel", "уурхайчин", "uurhaichin", "төлөлвлөлт", 
         "төслийн төлөвлөлт", "tusliin tuluwlult", "tuluwlult", "төлөвлөлт"
     ]
     if match_any(info_keywords, t) and len(t.split()) <= 4:
