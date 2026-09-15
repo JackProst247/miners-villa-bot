@@ -377,7 +377,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     ]
     exact_greetings = ["hi", "hiii", "hey", "мэнд"]
 
-    if (match_any(greetings, t) or any(w in t.split() for w in exact_greetings)) and len(t.split()) <= 4 and not match_any(["үнэ", "une", "vne", "утас", "utas", "байршил", "bairshil", "ywts", "yvts", "ashiglalt", "ашиглалт", "хэзээ", "hezee", "oroh"], t):
+    if (match_any(greetings, t) or any(w in t.split() for w in exact_greetings)) and len(t.split()) <= 4 and not match_any(["үнэ", "une", "vne", "утас", "utas", "байршил", "bairshil", "ywts", "yvts", "ashiglalt", "ашиглалт", "хэзээ", "hezee", "oroh", "мульт", "таун", "хаус", "mult", "taun", "haus", "house", "мкв", "m2", "зураг", "zurag"], t):
         return (
             "😊 Сайн байна уу? Манай төслийг сонирхон холбогдсон танд баярлалаа! Намайг Мина гэдэг. 🥰  "
             "Miners Villa төслийн талаар үнэ, "
