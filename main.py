@@ -424,7 +424,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
         "taniltsah", "uzeh", "ochij uzeh", "talbaitai taniltsah", "bairaa uzeh", "zahialsan bairaa"
     ]
     if match_any(visit_keywords, t) and not match_any(["зураг", "zurag", "plan"], t):
-        return "Төслийн талбайтай танилцахдаа борлуулалтын албатай холбогдож, ажлын өдрүүдээр цайны цагаар буюу 13:00-14:00 цагийн хооронд танилцах боломжтой 😊"
+        return "Төслийн талбайтай танилцахдаа борлуулалтын албатай холбогдож, боломжит өдрүүдээр цайны цагаар буюу 13:00-14:00 цагийн хооронд танилцах боломжтой 😊"
         
     location_keywords = ["байршил", "байрлал", "хаана байдаг", "хаана вэ", "хаана байрладаг", "хаана байрлах", "хотын хаана", "bairshil", "bairlal", "haana baidag", "haana ve", "haana bairladag", "haana", "brshil", "байршил хаана вэ", "haana bairlaj baigaa ve", "haana bairlah ve", "bairlal haana ve", "bairshil n"]
     if match_any(location_keywords, t):
