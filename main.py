@@ -10,8 +10,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
-from google import genai
-from google.genai import types
+from groq import Groq
 
 
 # =========================================================
@@ -29,8 +28,8 @@ META_PAGE_ACCESS_TOKEN = os.getenv(
     "META_PAGE_ACCESS_TOKEN"
 )
 
-GEMINI_API_KEY = os.getenv(
-    "GEMINI_API_KEY"
+GROQ_API_KEY = os.getenv(
+    "GROQ_API_KEY"
 )
 
 IMAGE_BASE_URL = os.getenv(
@@ -38,9 +37,9 @@ IMAGE_BASE_URL = os.getenv(
     ""
 ).rstrip("/")
 
-GEMINI_MODEL = os.getenv(
-    "GEMINI_MODEL",
-    "gemini-3.7-flash"
+GROQ_MODEL = os.getenv(
+    "GROQ_MODEL",
+    "llama-3.3-70b-versatile"
 )
 
 
@@ -163,7 +162,7 @@ SYSTEM_PROMPT = """
 * Борлуулалтын оффис: Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, төв зам дагуу.
 
 ТӨЛБӨРИЙН НӨХЦӨЛ:
-* "30% урьдчилгаа,\n" "40% явцын төлбөр,\n" "20% явцын төлбөр,\n" "10% түлхүүр гардуулах үед.\n"
+* 30% урьдчилгаа, 40% явцын төлбөр, 20% явцын төлбөр, 10% түлхүүр гардуулах үед.
 * Явцын төлбөрт зөвхөн байрны бартер сонсоно. Машин, газар, бизнесийн бартер байхгүй.
 
 ХАУСНЫ ТӨРЛҮҮД:
@@ -181,7 +180,7 @@ SYSTEM_PROMPT = """
 * 2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна. 7 хоног бүрийн 1 дэх өдөр Facebook Page дээр Reel ордог.
 
 ЗУРГИЙН ДҮРЭМ (Хэрэв зураг явуулах шаардлагатай бол):
-Gemini зөвхөн IMAGE KEY буцаана. Зөвшөөрөгдсөн IMAGE KEY:
+Зөвхөн IMAGE KEY буцаана. Зөвшөөрөгдсөн IMAGE KEY:
 """ + "\n".join(f"- {k}" for k in IMAGE_KEYS)
 
 
@@ -193,8 +192,8 @@ def check_environment():
     missing = []
     if not META_PAGE_ACCESS_TOKEN:
         missing.append("META_PAGE_ACCESS_TOKEN")
-    if not GEMINI_API_KEY:
-        missing.append("GEMINI_API_KEY")
+    if not GROQ_API_KEY:
+        missing.append("GROQ_API_KEY")
     if not IMAGE_BASE_URL:
         print("WARNING: IMAGE_BASE_URL тохируулаагүй байна.")
     if missing:
@@ -202,7 +201,7 @@ def check_environment():
 
 check_environment()
 
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 
 # =========================================================
@@ -211,7 +210,6 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
-    # Цэг болон таслалыг үлдээнэ (хэмжээ бичихэд хэрэгтэй: 125.21)
     text = re.sub(r"[^\w\s\.,]", " ", text)
     
     replacements = {
@@ -283,7 +281,6 @@ def history_text(sender_id: str) -> str:
 def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[str]]:
     t = normalize_text(user_text)
 
-    # 1. Мульт хаус тусгай хэмжээгээр зураг илгээх (Ерөнхий зураг + Тухайн мкв зураг)
     mult_image_map = {
         "126.32": "MULT_126_32", "126,32": "MULT_126_32", "126": "MULT_126",
         "125.21": "MULT_125", "125,21": "MULT_125", "125": "MULT_125",
@@ -301,23 +298,19 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         if re.search(pattern, t):
             return ["MULT", mult_image_map[size]]
 
-    # 2. Таун хаус тусгай хэмжээгээр зураг илгээх (Ерөнхий план + Тусгай мкв зураг)
     if re.search(r"\b(212|213)\b", t):
         return ["GENERAL_PLAN", "TOWNHOUSE_212", "TOWNHOUSE_212_1"]
     if re.search(r"\b(266|267)\b", t):
         return ["GENERAL_PLAN", "TOWNHOUSE_266", "TOWNHOUSE_266_1"]
 
-    # 3. Мульт хаус ерөнхий зураг (хэмжээ бичээгүй үед зөвхөн 1 зураг)
     mult_kws = ["мульт", "мульт хаус", "мультхаус", "mult", "multhouse", "mult house", "мулт", "мултхаус", "мулт хаус", "mult-house", "mult havs"]
     if match_any(mult_kws, t):
         return ["MULT"]
 
-    # 4. Таун хаус ерөнхий зураг (хэмжээ бичээгүй үед зөвхөн 1 зураг)
     townhouse_kws = ["таун хаус", "таунхаус", "таун", "taun", "townhouse", "town house", "таун-хаус", "taunhaus", "taun haus", "taun havs", "town-house", "town", "tawn"]
     if match_any(townhouse_kws, t):
         return ["GENERAL_PLAN"]
 
-    # 5. Зогсоолын зургууд
     parking_kws = ["зогсоол", "дулаан зогсоол", "машины зогсоол", "б1 зогсоол", "нэгдсэн зогсоол", "zogsool", "garaash", "b1", "гараж", "гараш", "гарааш", "garaj", "garash", "dulaan zogsool", "mashinii zogsool", "1 davhar", "1-р давхар"]
     if match_any(parking_kws, t):
         if match_any(["план", "төлөвлөлт", "plan"], t):
@@ -326,7 +319,6 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
             return ["MULT_PARKING_SPACE_1"]
         return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
 
-    # 6. Ногоон байгууламж, орчин, тохижилт
     greenery_kws = ["ногоон", "ногоон байгууламж", "ногоон цэцэрлэг", "ногоон орчин", "тохижилт", "гадна тохижилт", "амрах талбай", "амралтын талбай", "спортын талбай", "хүүхдийн талбай", "nogoon", "nogoon baiguulamj", "tohijilt", "gadna tohijilt", "landscaping", "amrah talbai", "sport", "sport talbai", "huuhdiin talbai", "цэцэрлэг", "мод", "зүлэг", "тоглоомын талбай", "togloomyn talbai", "huuhdiin togloom", "tsetserleg", "mod", "zuleg", "gadna orchin", "orchin", "sagsnii talbai"]
     if match_any(greenery_kws, t):
         if match_any(["0-5", "0 5", "0-5 нас"], t):
@@ -337,7 +329,6 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
             return ["SPORTS_AREA_13_16"]
         return ["GREEN_GARDEN", "LANDSCAPING", "SPORTS_AREA_PLAN", "RELAXATION_AREA"]
 
-    # 7. Ерөнхий төлөвлөгөө
     general_keywords = [
         "талбайн зураг", "талбай зураг", "ерөнхий төлөвлөгөө", "ерөнхий план",
         "план зураг", "план", "төлөвлөлтийн зураг", "төлөвлөлт зураг", "төслийн төлөвлөлт",
@@ -349,7 +340,6 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         if not match_any(["таун", "мульт", "зогсоол", "спорт", "тоглоом", "ногоон", "тохижилт", "амрах", "taun", "mult", "zogsool"], t):
             return ["GENERAL_PLAN"]
 
-    # 8. Ярианы түүхээс зураг таних
     photo_only_kws = ["зураг", "зураг үзье", "зураг харья", "зураг явуул", "зураг илгээ", "зургаа", "зургийг", "zurag", "zurag uzei", "zurag uzye", "zurag harya", "zurag yavuul", "zurag ilgee", "zuraguu", "zuragaa", "photo", "zurag n"]
     if match_any(photo_only_kws, t):
         hist_text = normalize_text(history_text(sender_id))
@@ -375,7 +365,6 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
 def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     t = normalize_text(user_text)
 
-    # 1. Мэндчилгээ
     greetings = [
         "сайн уу", "сайн байна уу", "сайн байнуу", "байна уу", "hello", "сайн",
         "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain", "sainuu", 
@@ -386,7 +375,6 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
         "udrin mend", "udriin mnd", "udrin mnd", "ugluunii mnd", "ugluni mend", 
         "oroinii mend", "oroin mnd", "mnd"
     ]
-    # "hi", "hey" зэрэг богино үгсийг зөвхөн салангид үг байвал л танихаар болголоо
     exact_greetings = ["hi", "hiii", "hey", "мэнд"]
 
     if (match_any(greetings, t) or any(w in t.split() for w in exact_greetings)) and len(t.split()) <= 4 and not match_any(["үнэ", "une", "vne", "утас", "utas", "байршил", "bairshil", "ywts", "yvts", "ashiglalt", "ашиглалт", "хэзээ", "hezee", "oroh"], t):
@@ -397,19 +385,16 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "байршлын талаар дэлгэрэнгүй мэдээлэл өгөхөд бэлэн байна."
         )
 
-    # 2. МКВ шууд бичих үеийн тайлбарууд (Зурагтай хамт явах текст)
     if re.search(r"\b(125\.21|125\,21|125|126\.32|126\,32|126|136\.42|136\,42|136|178\.39|178\,39|178|189\.52|189\,52|189\.64|189\,64|189|192\.25|192\,25|192|198\.52|198\,52|198|100\.77|100\,77|100|116|120\.85|120\,85|120)\b", t):
         return "Таны сонгосон Мульт хаусын загварын ерөнхий болон өрөөний зохион байгуулалтын зургийг илгээж байна. 😊 Дэлгэрэнгүй үнийн мэдээллийг борлуулалтын 9430-7017 дугаараас лавлаарай."
 
     if re.search(r"\b(212|213|266|267)\b", t):
         return "Таны сонгосон Таун хаусын ерөнхий болон өрөөний зохион байгуулалтын зургийг илгээж байна. 😊 Дэлгэрэнгүй үнийн мэдээллийг борлуулалтын 9430-7017 дугаараас лавлаарай."
 
-    # 3. Зөвхөн "Зураг үзье"
     photo_only_kws = ["зураг", "зураг үзье", "зураг харья", "зураг явуул", "зураг илгээ", "зургаа", "зургийг", "zurag", "zurag uzei", "zurag uzye", "zurag harya", "zurag yavuul", "zurag ilgee", "zuraguu", "zuragaa", "photo", "zurag n"]
     if match_any(photo_only_kws, t) and len(t.split()) <= 3:
         return "Мэдээж, холбогдох зургуудыг илгээж байна 😊"
 
-    # 4. Үнэ
     price_keywords = ["үнэ", "үнийн", "үнэтэй", "м2 үнэ", "м2", "мкв үнэ", "1м2", "1 м2", "квадратын үнэ", "квадрат үнэ", "үнэ хэд", "үнэ хэд вэ", "хэдэн төгрөг", "унэ", "унийн", "une", "uniin", "unetei", "m2 une", "mkv une", "une xed", "une hed", "heden togrog", "vne", "vniin", "vnetei", "vne xed", "vne hed", "une mdll", "vne mdll", "vne medeelel", "une medeelel", "үнэ өртөг", "хэд вэ", "hed ve", "hed be", "xed we", "xed be", "hemjee une", "une n hed ve", "үнэ нь хэд вэ", "un n hed ve", "une n xed"]
     if match_any(price_keywords, t):
         if not match_any(["сонголт", "songolt", "хэмжээ", "hemjee", "ямар ямар", "yamar"], t) or match_any(["үнэ", "une", "vne"], t):
@@ -419,40 +404,36 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
                 f"борлуулалтын албаны {SALES_PHONE} дугаараас лавлаарай 😊"
             )
 
-    # 5. Утас
     phone_keywords = ["утас", "дугаар", "холбогдох", "утасны дугаар", "холбоо барих", "залгах", "utas", "dugaar", "holbogdoh", "utasny dugaar", "zalgax", "zalgah", "uts", "utsnii dugaar", "холбогдох дугаар", "утас хэд вэ", "utas hed ve", "utas xed we", "zalgah dugaar", "utasnii dugaar"]
     if match_any(phone_keywords, t) and not match_any(["оффис", "office"], t):
         return f"Манай борлуулалтын утас: {SALES_PHONE} 😊"
 
-    # 6. Оффис
     office_keywords = ["оффис", "хаяг", "оффисын хаяг", "оффис хаана", "office", "hayag", "offis", "offis haana", "оффис хаана вэ", "хаяг хаана вэ", "hayag haana ve", "offis haana ve", "haana ochihiin", "ochih"]
     if match_any(office_keywords, t):
         return f"Борлуулалтын оффис: {SALES_OFFICE}. Утас: {SALES_PHONE} 😊"
-    # 6.5 Ажлын цаг
+        
     working_hours_keywords = [
         "цаг", "ажиллах цаг", "ажлын цаг", "хэдээс", "хэд хүртэл", "онгойх", "хаах",
         "tsag", "ajliin tsag", "ajillah tsag", "hedees", "hed hurtel", "ongoidog", "haadag"
     ]
     if match_any(working_hours_keywords, t) and not match_any(["хэзээ орох", "hezee oroh"], t):
         return f"Манай борлуулалтын оффис өдөр бүр 09:00 - 18:00 цагийн хооронд ажиллаж байна. Та {SALES_PHONE} дугаараар мөн холбогдох боломжтой 😊"
-    # 6.6 Талбайтай танилцах / Байр үзэх
+        
     visit_keywords = [
         "танилцах", "үзэх", "очиж үзэх", "талбайтай танилцах", "байраа үзэх", "захиалсан байраа",
         "taniltsah", "uzeh", "ochij uzeh", "talbaitai taniltsah", "bairaa uzeh", "zahialsan bairaa"
     ]
     if match_any(visit_keywords, t) and not match_any(["зураг", "zurag", "plan"], t):
         return "Төслийн талбайтай танилцахдаа борлуулалтын албатай холбогдож, ажлын өдрүүдээр цайны цагаар буюу 13:00-14:00 цагийн хооронд танилцах боломжтой 😊"
-    # 7. Байршил
+        
     location_keywords = ["байршил", "байрлал", "хаана байдаг", "хаана вэ", "хаана байрладаг", "хаана байрлах", "хотын хаана", "bairshil", "bairlal", "haana baidag", "haana ve", "haana bairladag", "haana", "brshil", "байршил хаана вэ", "haana bairlaj baigaa ve", "haana bairlah ve", "bairlal haana ve", "bairshil n"]
     if match_any(location_keywords, t):
         return f"Miners Villa нь {LOCATION_TEXT}. Дэлгэрэнгүй мэдээллийг {SALES_PHONE} дугаараас лавлаарай 😊"
 
-    # 8. Төлбөрийн нөхцөл
     payment_keywords = ["төлбөр", "төлбөрийн нөхцөл", "төлөлтийн нөхцөл", "хэрхэн төлөх", "яаж төлөх", "урьдчилгаа", "хэдэн хувь", "tulbur", "tulburiin noktsol", "urdchilgaa", "yaj tuloh", "xedhen huv", "tlbur", "төлбөрийн графиг", "tolbor", "tulbur n", "tolboriin nohtsol", "yavtsiin tolbor", "yavc tolbor", "yavtsyn tolbor", "urdchilgaa hed", "urdchilgaa heden"]
     if match_any(payment_keywords, t) and not match_any(["бартер", "barter"], t):
         return f"Төлбөрийн нөхцөл: {PAYMENT_TEXT} Явцын төлбөрт зөвхөн байрны бартер сонсоно."
 
-    # 9. Бартер
     barter_keywords = ["бартер", "байраар", "машинаар", "газраар", "barter", "bairaar", "mashinaar", "gazraar", "бартер хийх үү", "barter hiih uu", "barterd", "barterlah", "oroltsuulah"]
     if match_any(barter_keywords, t):
         if match_any(["машин", "машинаар", "mashin", "mashinaar"], t):
@@ -461,12 +442,10 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Газрын бартер зөвшөөрөхгүй."
         return "Явцын төлбөрт зөвхөн байрны бартер сонсоно. Машин, газар, бизнесийн бартер зөвшөөрөхгүй."
 
-    # 10. Зогсоол
     parking_keywords = ["зогсоол", "гарааш", "б1", "дулаан зогсоол", "машины зогсоол", "zogsool", "garaash", "b1", "dulaan zogsool", "гараж", "гараш", "garaj", "zgsol", "1 davhar", "1-р давхар"]
     if match_any(parking_keywords, t):
         return PARKING_TEXT
 
-    # 11. Сингл / Твин хаус
     if match_any(["сингл", "твин", "ганц айлын", "хоёр айлын", "single", "twin", "сингл хаус", "твин хаус", "single house", "twin house", "gants ailyn", "hoyor ailyn"], t):
         return (
             "Манай Сингл хаус болон Твин хаусын борлуулалт "
@@ -474,7 +453,6 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "Мульт хаусын сонголтууд боломжтой байна 😊"
         )
 
-    # 12. Сонголтууд (Ерөнхий)
     size_keywords = ["сонголт", "мкв сонголт", "м2 сонголт", "мкв", "талбайн сонголт", "хэмжээний сонголт", "ямар сонголт", "songolt", "songoltuud", "mkv", "m2", "talbain songolt", "yamar songolt", "songolt baigaa yu", "songolt baigaa", "ямар хэмжээтэй", "yamar hemjeetei", "heden mkv", "heden m2", "talbai heden", "yamar yamar", "heden torliin"]
     if match_any(size_keywords, t) and not match_any(["таун", "мульт", "taun", "mult", "мулт", "town"], t):
         return (
@@ -485,7 +463,6 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "Та аль нэгийг нь сонирхож байвал хэмжээгээ бичиж дэлгэрэнгүй зураг авах боломжтой 😊"
         )
 
-    # 13. Мульт хаус ерөнхий асуулт
     mult_kws = ["мульт", "мульт хаус", "мультхаус", "mult", "multhouse", "mult house", "мулт", "мултхаус", "мулт хаус", "mult-house", "mult havs"]
     if match_any(mult_kws, t):
         return (
@@ -510,7 +487,6 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "• 198.52 м²"
         )
 
-    # 14. Таун хаус ерөнхий асуулт
     townhouse_kws = ["таун", "таун хаус", "таунхаус", "taun", "townhouse", "town house", "таун-хаус", "taunhaus", "taun haus", "taun havs", "town-house", "town", "tawn"]
     if match_any(townhouse_kws, t):
         return (
@@ -524,7 +500,6 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "Сонголтоо бичвэл бид тухайн загварын ерөнхий болон төлөвлөлтийн зургийг илгээх болно."
         )
 
-    # 15. Явц болон ашиглалтад орох хугацаа
     progress_keywords = ["явц", "барилга", "шинэ мэдээ", "yavts", "yavc", "barilga", "ywts", "yvst", "ywts n", "yvst n", "ywts yugjin", "yavts n yaj yvj bn", "barilgiin yavts"]
     if match_any(progress_keywords, t):
         return "Барилгын явцыг 7 хоног бүрийн 1 дэх өдөр Facebook Page болон Instagram дээр Reel хэлбэрээр шинэчилж хүргэдэг 😊"
@@ -537,12 +512,10 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
     if match_any(completion_keywords, t):
         return "2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна."
     
-    # 16. Ажилтантай холбогдох
     staff_kws = ["хүнтэй", "менежер", "ажилтан", "huntei", "manager", "ajiltan", "админ", "admin", "menejer", "bortai holbogdoh"]
     if match_any(staff_kws, t):
         return f"😊 Та манай борлуулалтын албатай {SALES_PHONE} дугаараар холбогдох боломжтой."
 
-  # 17. Ерөнхий мэдээлэл ба Танилцуулга
     info_keywords = [
         "мэдээлэл", "дэлгэрэнгүй", "мэдээлэл авъя", "төслийн мэдээлэл", "танилцуулга", 
         "medeelel", "delgerengui", "taniltsuulga", "info", "information", "medeelel avya", 
@@ -561,7 +534,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
             "✨ Өргөн сонголт: Та Таун (Town) болон Мульт (Multi) хаусны загваруудаас сонголт хийх боломжтой. (Жич: Сингл болон Твин хаусны борлуулалт дууссан)\n\n"
             "Танд эдгээр загваруудын аль нь илүү таалагдаж байна вэ? Мөн хямдрал урамшуулал, төлбөрийн нөхцөлийн мэдээлэл авахыг хүсвэл манай борлуулалтын албаны 9430-7017 дугаартай холбогдоорой! ✨"
         )
-    # 18. Хаусуудын ялгаа болон онцлог
+
     difference_keywords = [
         "ялгаа", "онцлог", "ялгаатай", "юугаараа", "ямар ялгаатай", "давуу тал",
         "yalgaa", "ontslog", "yalgaatai", "yuugaaraa", "davuu tal"
@@ -616,10 +589,6 @@ def send_fb_message(recipient_id: str, text: str):
 
 
 def send_images_by_keys(recipient_id: str, image_keys: List[str]):
-    """
-    Олон зургийг тус тусад нь цувуулж илгээх биш, Meta Carousel (Generic Template)
-    ашиглан НЭГ удаагийн API дуудлагаар гүйлгэж харах (swipe) боломжтойгоор аюулгүй илгээнэ.
-    """
     if not image_keys or not META_PAGE_ACCESS_TOKEN:
         return
 
@@ -679,12 +648,12 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
         print("Error sending Carousel to Facebook:", repr(e))
 
 # =========================================================
-# GEMINI AI (СҮҮЛИЙН АРГА / УУРТАЙ БОЛОН АЛДААТАЙ БИЧВЭР ДЭЭР)
+# GROQ AI (META LLAMA 3)
 # =========================================================
 
-def ask_gemini(sender_id: str, user_text: str):
+def ask_groq(sender_id: str, user_text: str):
     if not client:
-        raise RuntimeError("GEMINI_API_KEY тохируулаагүй байна.")
+        raise RuntimeError("GROQ_API_KEY тохируулаагүй байна.")
 
     prompt = f"""
 {SYSTEM_PROMPT}
@@ -692,22 +661,20 @@ def ask_gemini(sender_id: str, user_text: str):
 =========================================================
 ӨМНӨХ ЯРИАНЫ КОНТЕКСТ
 =========================================================
-
 {history_text(sender_id)}
 
 =========================================================
 ХЭРЭГЛЭГЧИЙН ШИНЭ МЕССЕЖ
 =========================================================
-
 {user_text}
 
 =========================================================
 ГАРГАЛТЫН ФОРМАТ
 =========================================================
-
 ЗӨВХӨН JSON буцаа. Нэг дор хамгийн ихдээ 4 хүртэлх зургийн KEY буцаана уу.
 Хэрэглэгч ууртай эсвэл алдаатай бичсэн байсан ч зөвөөр ойлгож, эелдэг, ойлгомжтой хариулна.
 
+JSON FORMAT:
 {{
     "reply": "Монгол хэл дээрх богино эелдэг хариулт",
     "image_keys": []
@@ -717,17 +684,18 @@ def ask_gemini(sender_id: str, user_text: str):
     last_error = None
     for attempt in range(3):
         try:
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.3,
-                    max_output_tokens=500,
-                ),
+            response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant designed to output only JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=500,
             )
-            raw = (response.text or "").strip()
-            print(f"GEMINI RAW (attempt {attempt + 1}):", raw)
+            raw = response.choices[0].message.content.strip()
+            print(f"GROQ RAW (attempt {attempt + 1}):", raw)
 
             data = json.loads(raw)
             reply = str(data.get("reply", "")).strip()
@@ -748,17 +716,10 @@ def ask_gemini(sender_id: str, user_text: str):
 
         except Exception as e:
             last_error = e
-            error_text = repr(e)
-            print(f"GEMINI ERROR (attempt {attempt + 1}/3):", error_text)
-
-            if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
-                break
-            if "503" in error_text or "UNAVAILABLE" in error_text:
-                if attempt < 2:
-                    time.sleep(2)
-                    continue
-            if isinstance(e, json.JSONDecodeError):
-                break
+            print(f"GROQ ERROR (attempt {attempt + 1}/3):", repr(e))
+            if attempt < 2:
+                time.sleep(2)
+                continue
             break
 
     raise last_error
@@ -770,7 +731,7 @@ def ask_gemini(sender_id: str, user_text: str):
 
 def process_ai_response(sender_id: str, user_text: str):
     try:
-        # 1. Түлхүүр үгээр хайх (Gemini token хэмнэх)
+        # 1. Түлхүүр үгээр хайх
         direct_reply = direct_faq_router(user_text, sender_id)
         image_result = direct_image_router(user_text, sender_id)
 
@@ -786,11 +747,11 @@ def process_ai_response(sender_id: str, user_text: str):
                 send_images_by_keys(sender_id, image_result[:4])
             return
 
-        # 2. Ойлгомжгүй эсвэл алдаатай бичвэр, түлхүүр үг таараагүй үед Gemini руу илгээх
+        # 2. Ойлгомжгүй эсвэл алдаатай бичвэр, түлхүүр үг таараагүй үед Groq (Meta Llama 3) AI руу илгээх
         try:
-            reply, image_keys = ask_gemini(sender_id, user_text)
-        except Exception as gemini_error:
-            print("GEMINI FALLBACK:", repr(gemini_error))
+            reply, image_keys = ask_groq(sender_id, user_text)
+        except Exception as ai_error:
+            print("AI FALLBACK:", repr(ai_error))
             reply = UNKNOWN_TEXT
             image_keys = []
 
@@ -864,9 +825,9 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 @app.get("/")
 async def root():
     return {
-        "status": "Miners Villa bot is running",
+        "status": "Miners Villa bot is running (Powered by Groq Llama-3)",
         "photo_folder": str(PHOTO_FOLDER),
         "image_count": len(IMAGE_LIBRARY),
         "image_base_url_configured": bool(IMAGE_BASE_URL),
-        "gemini_model": GEMINI_MODEL,
+        "groq_model": GROQ_MODEL,
     }
