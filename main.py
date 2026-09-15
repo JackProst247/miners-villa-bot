@@ -39,7 +39,7 @@ IMAGE_BASE_URL = os.getenv(
 
 GROQ_MODEL = os.getenv(
     "GROQ_MODEL",
-    "llama-3.3-70b-versatile"
+    "openai/gpt-oss-120b"
 )
 
 
@@ -369,11 +369,11 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[str]:
         "сайн уу", "сайн байна уу", "сайн байнуу", "байна уу", "hello", "сайн",
         "sain uu", "sain bainuu", "sain bainguu", "sainbainuu", "sain", "sainuu", 
         "snu", "snuu", "snuuu", "sn uu", "sn u", "u bn", "u baina", "uu bn", "sain u",
-        "bnu", "bnuu", "bn uu", "bna uu", "bainuu", "bn",
+        "bnu", "bnuu", "bn uu", "bna uu", "bainuu", "bn", "юу байна", "юу байна уу", "юу байнауу", "юу байнуу",
         "өглөөний мэнд", "өдрийн мэнд", "оройн мэнд", "mends", "mend", "helloo", 
         "uglooni mend", "udriin mend", "oroin mend", "сну", "снуу", "ёну",
         "udrin mend", "udriin mnd", "udrin mnd", "ugluunii mnd", "ugluni mend", 
-        "oroinii mend", "oroin mnd", "mnd"
+        "oroinii mend", "oroin mnd", "mnd", "yu baina", "yu baina uu", "yu bainuu", "yu bain", "yu bainu?", "yu bainaa", "yu bainaa?", "yu bainaa uu", "yu bainaa u", "yu bainaa u?", "yu bn", "yu bainaa uuuu"
     ]
     exact_greetings = ["hi", "hiii", "hey", "мэнд"]
 
