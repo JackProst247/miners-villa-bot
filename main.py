@@ -44,6 +44,7 @@ app.mount("/photo", StaticFiles(directory=str(PHOTO_FOLDER)), name="photo")
 # =========================================================
 
 IMAGE_LIBRARY = {
+    "GENERAL": "general",
     "GENERAL_PLAN": "general_plan",
     "GREEN_GARDEN": "Green_garden",
     "LANDSCAPING": "landscaping",
@@ -93,13 +94,9 @@ PRICE_MAX = 5_800_000
 SALES_PHONE = "9430-7017"
 
 SALES_OFFICE = "Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, төв зам дагуу"
-
 LOCATION_TEXT = "Баян-Өндөр уулын зүүн энгэрт, Бүсийн оношилгооны төвийн ард, Медипас эмнэлгийн ард, 30.8 га талбайд байрладаг."
-
 PAYMENT_TEXT = "30% урьдчилгаа, 40% явцын төлбөр, 20% явцын төлбөр, 10% түлхүүр гардуулах үед. Явцын төлбөрт зөвхөн байрны бартер сонсоно."
-
 PARKING_TEXT = "Мульт хаусын Б1 болон 1-р давхарт нэгдсэн дулаан зогсоол байрлана. Зогсоолын үнэ 50,000,000 ₮."
-
 UNKNOWN_TEXT = "Уучлаарай, би энэ асуултыг сайн ойлгосонгүй. Та асуултаа арай дэлгэрэнгүй бичнэ үү, эсвэл манай борлуулалтын албатай 9430-7017 дугаараар холбогдон лавлах боломжтой 😊"
 
 
@@ -156,6 +153,7 @@ def resolve_photo_file(stem: str) -> Optional[Path]:
     return None
 
 def get_public_image_url(filename: str) -> str:
+    # Өмнөх ажиллаж байсан хувилбараар хэвээр нь үлдээв
     if not IMAGE_BASE_URL:
         return ""
     return f"{IMAGE_BASE_URL}/{quote(filename, safe='')}"
@@ -196,10 +194,8 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         if re.search(pattern, t):
             return ["MULT", mult_image_map[size]]
 
-    if re.search(r"\b(212|213)\b", t):
-        return ["GENERAL_PLAN", "TOWNHOUSE_212", "TOWNHOUSE_212_1"]
-    if re.search(r"\b(266|267)\b", t):
-        return ["GENERAL_PLAN", "TOWNHOUSE_266", "TOWNHOUSE_266_1"]
+    if re.search(r"\b(212|213)\b", t): return ["GENERAL_PLAN", "TOWNHOUSE_212", "TOWNHOUSE_212_1"]
+    if re.search(r"\b(266|267)\b", t): return ["GENERAL_PLAN", "TOWNHOUSE_266", "TOWNHOUSE_266_1"]
 
     if match_any(["мульт", "mult", "мулт"], t): return ["MULT"]
     if match_any(["таун хаус", "таунхаус", "таун", "taun", "townhouse"], t): return ["GENERAL_PLAN"]
@@ -235,7 +231,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
         )
         return (reply, True)
 
-    # 2. Бусад хариултууд (Carousel харуулахгүй)
+    # 2. Бусад хариултууд (Carousel харуулахгүй, гэхдээ Quick replies буюу товчлуурууд харагдана)
     price_keywords = ["үнэ", "үнийн", "үнэтэй", "м2 үнэ", "une", "vne", "xed", "hed"]
     if match_any(price_keywords, t) and not match_any(["сонголт", "хэмжээ"], t):
         reply = (
@@ -309,9 +305,15 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
 def messenger_url():
     return f"https://graph.facebook.com/v20.0/me/messages?access_token={META_PAGE_ACCESS_TOKEN}"
 
-def send_fb_message(recipient_id: str, text: str):
+def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[Dict]] = None):
     if not META_PAGE_ACCESS_TOKEN: return
-    payload = {"recipient": {"id": recipient_id}, "message": {"text": text}}
+    
+    message_data = {"text": text}
+    # Хэрэв товчлуур байвал мессежинд хавсаргана
+    if quick_replies:
+        message_data["quick_replies"] = quick_replies
+        
+    payload = {"recipient": {"id": recipient_id}, "message": message_data}
     try:
         requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
     except Exception as e:
@@ -321,13 +323,13 @@ def send_carousel_menu(recipient_id: str):
     """Гүйдэг 2 карттай цэсийг илгээнэ. Local зураг ашиглана."""
     if not META_PAGE_ACCESS_TOKEN: return
     
-    # 1-р картны зураг (Таны photo хавтас дахь 'general' зураг)
-    card1_img_path = resolve_photo_file("general")
-    card1_url = get_public_image_url(card1_img_path.name) if card1_img_path else ""
+    # Эхний картын зураг ('GENERAL')
+    card1_path = resolve_photo_file(IMAGE_LIBRARY.get("GENERAL", "general"))
+    card1_url = get_public_image_url(card1_path.name) if card1_path else "https://i.imgur.com/uO6O7l3.jpeg"
 
-    # 2-р картны зураг (Таны photo хавтас дахь 'Green_garden' зураг)
-    card2_img_path = resolve_photo_file("Green_garden")
-    card2_url = get_public_image_url(card2_img_path.name) if card2_img_path else ""
+    # Хоёр дахь картын зураг ('GREEN_GARDEN')
+    card2_path = resolve_photo_file(IMAGE_LIBRARY.get("GREEN_GARDEN", "Green_garden"))
+    card2_url = get_public_image_url(card2_path.name) if card2_path else "https://i.imgur.com/n6tS0vX.jpeg"
     
     payload = {
         "recipient": {"id": recipient_id},
@@ -450,6 +452,13 @@ def process_ai_response(sender_id: str, user_text: str):
         faq_result = direct_faq_router(user_text, sender_id)
         image_result = direct_image_router(user_text, sender_id)
 
+        # Үндсэн текстэн хариултын доор гарах "Quick Replies" товчлуурууд
+        standard_buttons = [
+            {"content_type": "text", "title": "🏠 Загварын сонголт", "payload": "PAYLOAD_MODEL"},
+            {"content_type": "text", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"},
+            {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"}
+        ]
+
         if faq_result or image_result:
             if faq_result:
                 reply, show_carousel = faq_result
@@ -460,13 +469,14 @@ def process_ai_response(sender_id: str, user_text: str):
             add_to_history(sender_id, "user", user_text)
             add_to_history(sender_id, "assistant", reply)
 
-            send_fb_message(sender_id, reply)
-            
-            # Цэс харуулах эсэх
             if show_carousel:
+                # Эхний мэндчилгээ зэрэг дээр дангаар нь явуулж картыг хавсаргана
+                send_fb_message(sender_id, reply)
                 send_carousel_menu(sender_id)
+            else:
+                # Carousel гарахгүй үед буюу (үнэ, утас асуух) үед товчлуур нэмнэ
+                send_fb_message(sender_id, reply, quick_replies=standard_buttons)
                 
-            # Зураг харуулах эсэх
             if image_result:
                 send_images_by_keys(sender_id, image_result[:4])
             return
@@ -476,7 +486,7 @@ def process_ai_response(sender_id: str, user_text: str):
         add_to_history(sender_id, "user", user_text)
         add_to_history(sender_id, "assistant", reply)
 
-        send_fb_message(sender_id, reply)
+        send_fb_message(sender_id, reply, quick_replies=standard_buttons)
         if image_keys:
             send_images_by_keys(sender_id, image_keys[:4])
 
@@ -506,7 +516,6 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
     if data.get("object") != "page":
         return Response(content="NOT_A_PAGE_EVENT", status_code=404)
 
-    # Postback (Товчлуур дарах)-ыг таних тайлбар толь
     payload_map = {
         "GET_STARTED": "сайн уу",
         "PAYLOAD_PRICE": "үнэ",
@@ -526,9 +535,14 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
             
             user_text = ""
             if message and not message.get("is_echo"):
-                user_text = message.get("text", "").strip()
+                # Quick reply (доорх жижиг товч) дарсан эсэхийг шалгах
+                if "quick_reply" in message:
+                    raw_payload = message["quick_reply"].get("payload", "").strip()
+                    user_text = payload_map.get(raw_payload, raw_payload)
+                else:
+                    user_text = message.get("text", "").strip()
             elif postback:
-                # Хэрэв хэрэглэгч товчлуур дарвал payload-ийг үг рүү хөрвүүлнэ
+                # Картны товчлуур дарсан эсэхийг шалгах
                 raw_payload = postback.get("payload", "").strip()
                 user_text = payload_map.get(raw_payload, raw_payload)
 
@@ -539,4 +553,4 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def root():
-    return {"status": "Miners Villa bot is running (Updated version with Local Carousel Images)"}
+    return {"status": "Miners Villa bot is running (Quick Replies added)"}
