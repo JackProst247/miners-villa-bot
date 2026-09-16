@@ -23,7 +23,7 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 IMAGE_BASE_URL = os.getenv("IMAGE_BASE_URL", "").rstrip("/")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192") # Эсвэл өөрийн ашиглаж буй модел
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192")
 
 
 # =========================================================
@@ -233,7 +233,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
             "Урьд нь 'Уурхайчин-3' нэртэй байсан манай төсөл илүү өргөжиж, хүн бүхэнд нээлттэй "
             "амины орон сууцны цогцолбор хотхон болсныг дуулгахад таатай байна. Би танд ямар мэдээлэл өгч туслах вэ? 👇"
         )
-        return (reply, True) # True гэдэг нь цэс харуулна гэсэн үг
+        return (reply, True)
 
     # 2. Бусад хариултууд (Carousel харуулахгүй)
     price_keywords = ["үнэ", "үнийн", "үнэтэй", "м2 үнэ", "une", "vne", "xed", "hed"]
@@ -318,8 +318,16 @@ def send_fb_message(recipient_id: str, text: str):
         print("Error sending text:", repr(e))
 
 def send_carousel_menu(recipient_id: str):
-    """Гүйдэг 2 карттай цэсийг илгээнэ"""
+    """Гүйдэг 2 карттай цэсийг илгээнэ. Local зураг ашиглана."""
     if not META_PAGE_ACCESS_TOKEN: return
+    
+    # 1-р картны зураг (Таны photo хавтас дахь 'general' зураг)
+    card1_img_path = resolve_photo_file("general")
+    card1_url = get_public_image_url(card1_img_path.name) if card1_img_path else ""
+
+    # 2-р картны зураг (Таны photo хавтас дахь 'Green_garden' зураг)
+    card2_img_path = resolve_photo_file("Green_garden")
+    card2_url = get_public_image_url(card2_img_path.name) if card2_img_path else ""
     
     payload = {
         "recipient": {"id": recipient_id},
@@ -332,7 +340,7 @@ def send_carousel_menu(recipient_id: str):
                         {
                             "title": "MINERS VILLA ТӨСӨЛ",
                             "subtitle": "Тав тух, үнэ цэнийн илэрхийлэл болсон хотхон",
-                            "image_url": "https://i.imgur.com/uO6O7l3.jpeg", # Төслийн ерөнхий зураг тавих
+                            "image_url": card1_url,
                             "buttons": [
                                 {"type": "postback", "title": "💰 Үнийн мэдээлэл", "payload": "PAYLOAD_PRICE"},
                                 {"type": "postback", "title": "ℹ️ Ерөнхий танилцуулга", "payload": "PAYLOAD_INFO"},
@@ -342,7 +350,7 @@ def send_carousel_menu(recipient_id: str):
                         {
                             "title": "MINERS VILLA ТӨСӨЛ",
                             "subtitle": "Хүн бүхэнд нээлттэй амины орон сууцны цогцолбор",
-                            "image_url": "https://i.imgur.com/n6tS0vX.jpeg", # Гадна тохижилтын зураг тавих
+                            "image_url": card2_url,
                             "buttons": [
                                 {"type": "postback", "title": "📍 Төслийн байршил", "payload": "PAYLOAD_LOCATION"},
                                 {"type": "postback", "title": "🌳 Төслийн онцлог", "payload": "PAYLOAD_FEATURES"},
@@ -531,4 +539,4 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def root():
-    return {"status": "Miners Villa bot is running (Updated version with Carousel)"}
+    return {"status": "Miners Villa bot is running (Updated version with Local Carousel Images)"}
