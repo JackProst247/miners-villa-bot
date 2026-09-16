@@ -146,7 +146,6 @@ def match_any(keywords: List[str], normalized_text: str) -> bool:
     return any(normalize_text(kw) in normalized_text for kw in keywords)
 
 def resolve_photo_file(stem: str) -> Optional[Path]:
-    # Том жижиг үсгийн зөрүүг арилгаж, case-insensitive хайлт хийх
     if not PHOTO_FOLDER.exists():
         return None
     for file in PHOTO_FOLDER.iterdir():
@@ -155,9 +154,9 @@ def resolve_photo_file(stem: str) -> Optional[Path]:
     return None
 
 def get_public_image_url(filename: str) -> str:
-    # Таны хүссэний дагуу Render-ийн хаягийг хатуу зааж өглөө
     base_url = "https://miners-villa-bot.onrender.com/photo"
-    return f"{base_url}/{quote(filename, safe='')}"
+    # Facebook cache-ийг алгасахын тулд хувилбар нэмэв (?v=2)
+    return f"{base_url}/{quote(filename, safe='')}?v=2"
 
 def add_to_history(sender_id: str, role: str, text: str):
     history = CONVERSATIONS.setdefault(sender_id, [])
@@ -215,11 +214,18 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
 
 
 # =========================================================
-# DIRECT FAQ ROUTER (Returns text AND whether to show Carousel)
+# DIRECT FAQ ROUTER (Returns text, show_carousel, custom_quick_replies)
 # =========================================================
 
-def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str, bool]]:
+def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str, bool, Optional[List[Dict]]]]:
     t = normalize_text(user_text)
+
+    # Стандарт товчлуурууд
+    default_buttons = [
+        {"content_type": "text", "title": "🏡 Таун хаус", "payload": "PAYLOAD_TOWN"},
+        {"content_type": "text", "title": "🏢 Мульт хаус", "payload": "PAYLOAD_MULT"},
+        {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"}
+    ]
 
     # 1. Мэндчилгээ болон Эхлэл (Carousel харуулна)
     greetings = ["сайн уу", "сайн байна уу", "hello", "hi", "мэнд", "get started", "start", "эхлэх"]
@@ -230,7 +236,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
             "Урьд нь 'Уурхайчин-3' нэртэй байсан манай төсөл илүү өргөжиж, хүн бүхэнд нээлттэй "
             "амины орон сууцны цогцолбор хотхон болсныг дуулгахад таатай байна. Би танд ямар мэдээлэл өгч туслах вэ? 👇"
         )
-        return (reply, True)
+        return (reply, True, None)
 
     # 2. Бусад хариултууд
     price_keywords = ["үнэ", "үнийн", "үнэтэй", "м2 үнэ", "une", "vne", "xed", "hed"]
@@ -240,15 +246,15 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
             "Дэлгэрэнгүй үнийн саналыг борлуулалтын албаны "
             f"{SALES_PHONE} дугаараас лавлаарай 😊"
         )
-        return (reply, False)
+        return (reply, False, default_buttons)
         
     location_keywords = ["байршил", "хаана байдаг", "хаана вэ", "bairshil", "haana"]
     if match_any(location_keywords, t):
-        return (f"Miners Villa нь {LOCATION_TEXT} Дэлгэрэнгүйг: {SALES_PHONE} 😊", False)
+        return (f"Miners Villa нь {LOCATION_TEXT} Дэлгэрэнгүйг: {SALES_PHONE} 😊", False, default_buttons)
 
     phone_keywords = ["утас", "дугаар", "холбоо барих", "залгах", "utas", "dugaar"]
     if match_any(phone_keywords, t) and not match_any(["оффис"], t):
-        return (f"Манай борлуулалтын утас: {SALES_PHONE} 😊", False)
+        return (f"Манай борлуулалтын утас: {SALES_PHONE} 😊", False, default_buttons)
 
     info_keywords = ["мэдээлэл", "дэлгэрэнгүй", "танилцуулга", "medeelel", "taniltsuulga"]
     if match_any(info_keywords, t) and len(t.split()) <= 4:
@@ -260,7 +266,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
             "✨ Сонголт: Таун (Town) болон Мульт (Multi) хаусууд.\n\n"
             f"Дэлгэрэнгүй мэдээлэл авахыг хүсвэл {SALES_PHONE} дугаартай холбогдоорой! ✨"
         )
-        return (reply, False)
+        return (reply, False, default_buttons)
         
     features_keywords = ["онцлог", "давуу тал", "ялгаа", "ontslog", "davuu tal"]
     if match_any(features_keywords, t):
@@ -272,29 +278,35 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
             "✅ Насны онцлогт тохирсон 4 төрлийн тоглоомын талбай\n"
             "✅ 400 орчим автомашины нэгдсэн дулаан зогсоол"
         )
-        return (reply, False)
+        return (reply, False, default_buttons)
 
+    # Загварын сонголт дарсан үед шууд товчлуурууд гаргах
     model_keywords = ["сонголт", "загвар", "хэмжээ", "songolt", "zagvar"]
     if match_any(model_keywords, t):
         reply = (
             "Манай төслийн загварын сонголтууд:\n\n"
             "🏡 Таун хаус: 213.33 м², 267.48 м²\n"
             "🏢 Мульт хаус: 125.21 м², 126 м², 136.42 м², 178.39 м², 189.52 м², 189.64 м², 192.25 м², 198.52 м²\n\n"
-            "(Сингл болон Твин хаусны борлуулалт дууссан). Та аль нэгийг нь сонирхож байвал хэмжээгээ бичиж дэлгэрэнгүй зураг авах боломжтой 😊"
+            "Доорх сонголтуудаас дарж дэлгэрэнгүй зураг болон мэдээллийг шууд аваарай 👇"
         )
-        return (reply, False)
+        model_buttons = [
+            {"content_type": "text", "title": "🏡 Таун хаус (213м²)", "payload": "PAYLOAD_TOWN"},
+            {"content_type": "text", "title": "🏢 Мульт хаус", "payload": "PAYLOAD_MULT"},
+            {"content_type": "text", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
+        ]
+        return (reply, False, model_buttons)
 
     payment_keywords = ["төлбөр", "төлбөрийн нөхцөл", "урьдчилгаа", "tulbur", "urdchilgaa"]
     if match_any(payment_keywords, t):
-        return (PAYMENT_TEXT, False)
+        return (PAYMENT_TEXT, False, default_buttons)
         
     parking_keywords = ["зогсоол", "гарааш", "б1", "zogsool", "garaash"]
     if match_any(parking_keywords, t):
-        return (PARKING_TEXT, False)
+        return (PARKING_TEXT, False, default_buttons)
         
     completion_keywords = ["ашиглалт", "хэзээ орох", "ashiglalt", "hezee oroh"]
     if match_any(completion_keywords, t):
-        return ("2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна. Дэлгэрэнгүйг 9430-7017 дугаараас лавлана уу 😊", False)
+        return ("2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна. Дэлгэрэнгүйг 9430-7017 дугаараас лавлана уу 😊", False, default_buttons)
 
     return None
 
@@ -322,13 +334,11 @@ def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[D
 def send_carousel_menu(recipient_id: str):
     if not META_PAGE_ACCESS_TOKEN: return
     
-    # 1. Эхний картын зураг (Render-ээс шууд татах)
     card1_path = resolve_photo_file(IMAGE_LIBRARY.get("GENERAL", "general"))
-    card1_url = get_public_image_url(card1_path.name) if card1_path else "https://miners-villa-bot.onrender.com/photo/general.jpg"
+    card1_url = get_public_image_url(card1_path.name) if card1_path else "https://miners-villa-bot.onrender.com/photo/general.jpg?v=2"
 
-    # 2. Хоёр дахь картын зураг (Render-ээс шууд татах)
     card2_path = resolve_photo_file(IMAGE_LIBRARY.get("GREEN_GARDEN", "Green_garden"))
-    card2_url = get_public_image_url(card2_path.name) if card2_path else "https://miners-villa-bot.onrender.com/photo/Green_garden.jpg"
+    card2_url = get_public_image_url(card2_path.name) if card2_path else "https://miners-villa-bot.onrender.com/photo/Green_garden.jpg?v=2"
     
     payload = {
         "recipient": {"id": recipient_id},
@@ -451,18 +461,19 @@ def process_ai_response(sender_id: str, user_text: str):
         faq_result = direct_faq_router(user_text, sender_id)
         image_result = direct_image_router(user_text, sender_id)
 
-        standard_buttons = [
-            {"content_type": "text", "title": "🏠 Загварын сонголт", "payload": "PAYLOAD_MODEL"},
-            {"content_type": "text", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"},
+        default_buttons = [
+            {"content_type": "text", "title": "🏡 Таун хаус", "payload": "PAYLOAD_TOWN"},
+            {"content_type": "text", "title": "🏢 Мульт хаус", "payload": "PAYLOAD_MULT"},
             {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"}
         ]
 
         if faq_result or image_result:
             if faq_result:
-                reply, show_carousel = faq_result
+                reply, show_carousel, custom_buttons = faq_result
             else:
                 reply = "Мэдээж 😊 Дэлгэрэнгүй зургийг явууллаа."
                 show_carousel = False
+                custom_buttons = default_buttons
 
             add_to_history(sender_id, "user", user_text)
             add_to_history(sender_id, "assistant", reply)
@@ -471,7 +482,7 @@ def process_ai_response(sender_id: str, user_text: str):
                 send_fb_message(sender_id, reply)
                 send_carousel_menu(sender_id)
             else:
-                send_fb_message(sender_id, reply, quick_replies=standard_buttons)
+                send_fb_message(sender_id, reply, quick_replies=custom_buttons or default_buttons)
                 
             if image_result:
                 send_images_by_keys(sender_id, image_result[:4])
@@ -481,7 +492,7 @@ def process_ai_response(sender_id: str, user_text: str):
         add_to_history(sender_id, "user", user_text)
         add_to_history(sender_id, "assistant", reply)
 
-        send_fb_message(sender_id, reply, quick_replies=standard_buttons)
+        send_fb_message(sender_id, reply, quick_replies=default_buttons)
         if image_keys:
             send_images_by_keys(sender_id, image_keys[:4])
 
@@ -518,7 +529,9 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
         "PAYLOAD_MODEL": "сонголт",
         "PAYLOAD_LOCATION": "байршил",
         "PAYLOAD_FEATURES": "онцлог",
-        "PAYLOAD_CONTACT": "утас"
+        "PAYLOAD_CONTACT": "утас",
+        "PAYLOAD_TOWN": "таун хаус",
+        "PAYLOAD_MULT": "мульт хаус"
     }
 
     for entry in data.get("entry", []):
@@ -546,4 +559,4 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def root():
-    return {"status": "Miners Villa bot is running"}
+    return {"status": "Miners Villa bot is running with quick select buttons"}
