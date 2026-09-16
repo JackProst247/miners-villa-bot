@@ -175,7 +175,8 @@ def resolve_photo_file(stem: str) -> Optional[Path]:
     return None
 
 def get_public_image_url(filename: str) -> str:
-    base_url = "https://miners-villa-bot.onrender.com/photo"
+    # Энд байгаа хаягийг Render дээр өгсөн өөрийнхөө бодит хаягаар солино
+    base_url = "https://miners-villa-bot.onrender.com/photo/"
     return f"{base_url}/{quote(filename, safe='')}"
 
 def add_to_history(sender_id: str, role: str, text: str):
