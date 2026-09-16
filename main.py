@@ -589,6 +589,235 @@ def send_fb_message(recipient_id: str, text: str):
     except Exception as e:
         print("Error sending text to Facebook:", repr(e))
 
+def send_carousel_menu(recipient_id):
+    url = f"https://graph.facebook.com/v17.0/me/messages?access_token={PAGE_ACCESS_TOKEN}"
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {
+            "attachment": {
+                "type": "template",
+                "payload": {
+                    "template_type": "generic",
+                    "elements": [
+                        {
+                            "title": "Miners Villa Төсөл",
+                            "subtitle": "Тав тух, үнэ цэнийн илэрхийлэл болсон аТаны илгээсэн "Miners Villa" төслийн мэдээлэл болон `image_9e9d2d.png` зураг дээрх Facebook Messenger-ийн харагдах байдалд үндэслэн чатботын интерфэйсийг вэб (HTML/CSS) кодоор бэлтгэлээ. 
+
+Энэхүү код нь яг зураг дээрх шиг хэвтээ чиглэлд гүйдэг (carousel) цэс, мөн хэрэглэгч болон ботын харилцан ярианы бүтэцтэй байх юм. Та үүнийг хуулж аваад `.html` өргөтгөлтэй хадгалан хөтөч дээрээ нээж харах эсвэл хөгжүүлэлтдээ ашиглах боломжтой.
+
+### Чатботын Интерфэйс Код (HTML & CSS)
+
+```html
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Miners Villa Chatbot</title>
+<style>
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: #ffffff;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+    }
+    .chat-container {
+        width: 100%;
+        max-width: 800px;
+    }
+    /* Толгойн хэсэг */
+    .header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+    .avatar {
+        width: 60px;
+        height: 60px;
+        background-color: #1a2b3c;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 12px;
+        margin-bottom: 10px;
+    }
+    .page-name {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 4px 0;
+    }
+    .page-info {
+        font-size: 13px;
+        color: #65676B;
+        margin: 0;
+    }
+
+    /* Хэрэглэгчийн зурвас */
+    .message-row {
+        display: flex;
+        margin-bottom: 20px;
+    }
+    .message-row.user {
+        justify-content: flex-end;
+    }
+    .bubble {
+        padding: 10px 16px;
+        border-radius: 18px;
+        font-size: 15px;
+        max-width: 70%;
+        line-height: 1.4;
+    }
+    .bubble.user {
+        background-color: #8a2be2;
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+    .bubble.bot-text {
+        background-color: #f0f2f5;
+        color: black;
+        border-bottom-left-radius: 4px;
+        margin-bottom: 10px;
+    }
+
+    /* Ботын гүйдэг цэс (Carousel) */
+    .carousel-container {
+        display: flex;
+        overflow-x: auto;
+        gap: 12px;
+        padding-bottom: 15px;
+        /* Scrollbar нуух */
+        scrollbar-width: none; 
+    }
+    .carousel-container::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .card {
+        flex: 0 0 250px;
+        border: 1px solid #E4E6EB;
+        border-radius: 16px;
+        overflow: hidden;
+        background: white;
+    }
+    .card-img {
+        width: 100%;
+        height: 150px;
+        background-color: #e0e0e0;
+        object-fit: cover;
+    }
+    .card-body {
+        padding: 12px;
+    }
+    .card-title {
+        font-weight: 700;
+        font-size: 14px;
+        margin: 0 0 4px 0;
+        text-transform: uppercase;
+    }
+    .card-subtitle {
+        font-size: 13px;
+        color: #65676B;
+        margin: 0 0 12px 0;
+        height: 36px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    /* Товчнууд */
+    .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 8px 0;
+        margin-bottom: 8px;
+        background-color: #f0f2f5;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #050505;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+    .btn:last-child {
+        margin-bottom: 0;
+    }
+    .btn:hover {
+        background-color: #E4E6EB;
+    }
+    .btn-icon {
+        margin-right: 6px;
+        font-size: 16px;
+    }
+</style>
+</head>
+<body>
+
+<div class="chat-container">
+    <!-- Толгойн хэсэг -->
+    <div class="header">
+        <div class="avatar">MV</div>
+        <h1 class="page-name">Miners Villa</h1>
+        <p class="page-info">14K people follow this<br>Real Estate</p>
+    </div>
+
+    <!-- Хэрэглэгчийн эхлүүлэх үйлдэл -->
+    <div class="message-row user">
+        <div class="bubble user">Get started</div>
+    </div>
+
+    <!-- Ботын мэндчилгээ -->
+    <div class="message-row bot">
+        <div class="bubble bot-text">
+            Сайн байна уу? Тав тух, үнэ цэнийн илэрхийлэл болсон <strong>'Miners Villa'</strong> төслийн албан ёсны чатботод тавтай морил!<br><br>
+            Урьд нь 'Уурхайчин-3' нэртэй байсан манай төсөл илүү өргөжиж, хүн бүхэнд нээлттэй цогцолбор хотхон болсныг дуулгахад таатай байна. Би танд ямар мэдээлэл өгч туслах вэ?
+        </div>
+    </div>
+
+    <!-- Ботын Картууд (Carousel) -->
+    <div class="carousel-container">
+        <!-- Карт 1 -->
+        <div class="card">
+            <!-- Зургийн оронд бодит линкээ оруулна уу -->
+            <img src="[https://via.placeholder.com/250x150/2b3a4a/ffffff?text=Miners+Villa+1](https://via.placeholder.com/250x150/2b3a4a/ffffff?text=Miners+Villa+1)" alt="Miners Villa" class="card-img">
+            <div class="card-body">
+                <h2 class="card-title">MINERS VILLA</h2>
+                <p class="card-subtitle">Тав тух, үнэ цэнийн илэрхийлэл болсон хотхон</p>
+                <button class="btn"><span class="btn-icon">💰</span> Үнийн мэдээлэл</button>
+                <button class="btn"><span class="btn-icon">ℹ️</span> Ерөнхий танилцуулга</button>
+                <button class="btn"><span class="btn-icon">🏠</span> Загварын сонголт</button>
+            </div>
+        </div>
+
+        <!-- Карт 2 -->
+        <div class="card">
+            <!-- Зургийн оронд бодит линкээ оруулна уу -->
+            <img src="[https://via.placeholder.com/250x150/3a4a5a/ffffff?text=Miners+Villa+2](https://via.placeholder.com/250x150/3a4a5a/ffffff?text=Miners+Villa+2)" alt="Miners Villa" class="card-img">
+            <div class="card-body">
+                <h2 class="card-title">MINERS VILLA</h2>
+                <p class="card-subtitle">Хүн бүхэнд нээлттэй амины орон сууцны цогцолбор</p>
+                <button class="btn"><span class="btn-icon">📍</span> Төслийн байршил</button>
+                <button class="btn"><span class="btn-icon">🌳</span> Төслийн онцлог</button>
+                <button class="btn"><span class="btn-icon">☎️</span> Холбоо барих</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Хэрэглэгч товч дарсны дараах хариуны жишээ -->
+    <div class="message-row user" style="margin-top: 10px;">
+        <div class="bubble user">📍 Төслийн байршил</div>
+    </div>
+</div>
+
+</body>
+</html>
 
 def send_images_by_keys(recipient_id: str, image_keys: List[str]):
     if not image_keys or not META_PAGE_ACCESS_TOKEN:
