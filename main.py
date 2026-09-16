@@ -22,7 +22,6 @@ load_dotenv()
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-IMAGE_BASE_URL = os.getenv("IMAGE_BASE_URL", "").rstrip("/")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192")
 
 
@@ -147,16 +146,18 @@ def match_any(keywords: List[str], normalized_text: str) -> bool:
     return any(normalize_text(kw) in normalized_text for kw in keywords)
 
 def resolve_photo_file(stem: str) -> Optional[Path]:
-    exact_matches = list(PHOTO_FOLDER.glob(stem + ".*"))
-    if exact_matches:
-        return exact_matches[0]
+    # Том жижиг үсгийн зөрүүг арилгаж, case-insensitive хайлт хийх
+    if not PHOTO_FOLDER.exists():
+        return None
+    for file in PHOTO_FOLDER.iterdir():
+        if file.is_file() and file.stem.lower() == stem.lower():
+            return file
     return None
 
 def get_public_image_url(filename: str) -> str:
-    # Өмнөх ажиллаж байсан хувилбараар хэвээр нь үлдээв
-    if not IMAGE_BASE_URL:
-        return ""
-    return f"{IMAGE_BASE_URL}/{quote(filename, safe='')}"
+    # Таны хүссэний дагуу Render-ийн хаягийг хатуу зааж өглөө
+    base_url = "https://miners-villa-bot.onrender.com/photo"
+    return f"{base_url}/{quote(filename, safe='')}"
 
 def add_to_history(sender_id: str, role: str, text: str):
     history = CONVERSATIONS.setdefault(sender_id, [])
@@ -231,7 +232,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
         )
         return (reply, True)
 
-    # 2. Бусад хариултууд (Carousel харуулахгүй, гэхдээ Quick replies буюу товчлуурууд харагдана)
+    # 2. Бусад хариултууд
     price_keywords = ["үнэ", "үнийн", "үнэтэй", "м2 үнэ", "une", "vne", "xed", "hed"]
     if match_any(price_keywords, t) and not match_any(["сонголт", "хэмжээ"], t):
         reply = (
@@ -309,7 +310,6 @@ def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[D
     if not META_PAGE_ACCESS_TOKEN: return
     
     message_data = {"text": text}
-    # Хэрэв товчлуур байвал мессежинд хавсаргана
     if quick_replies:
         message_data["quick_replies"] = quick_replies
         
@@ -320,16 +320,15 @@ def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[D
         print("Error sending text:", repr(e))
 
 def send_carousel_menu(recipient_id: str):
-    """Гүйдэг 2 карттай цэсийг илгээнэ. Local зураг ашиглана."""
     if not META_PAGE_ACCESS_TOKEN: return
     
-    # Эхний картын зураг ('GENERAL')
+    # 1. Эхний картын зураг (Render-ээс шууд татах)
     card1_path = resolve_photo_file(IMAGE_LIBRARY.get("GENERAL", "general"))
-    card1_url = get_public_image_url(card1_path.name) if card1_path else "https://i.imgur.com/uO6O7l3.jpeg"
+    card1_url = get_public_image_url(card1_path.name) if card1_path else "https://miners-villa-bot.onrender.com/photo/general.jpg"
 
-    # Хоёр дахь картын зураг ('GREEN_GARDEN')
+    # 2. Хоёр дахь картын зураг (Render-ээс шууд татах)
     card2_path = resolve_photo_file(IMAGE_LIBRARY.get("GREEN_GARDEN", "Green_garden"))
-    card2_url = get_public_image_url(card2_path.name) if card2_path else "https://i.imgur.com/n6tS0vX.jpeg"
+    card2_url = get_public_image_url(card2_path.name) if card2_path else "https://miners-villa-bot.onrender.com/photo/Green_garden.jpg"
     
     payload = {
         "recipient": {"id": recipient_id},
@@ -452,7 +451,6 @@ def process_ai_response(sender_id: str, user_text: str):
         faq_result = direct_faq_router(user_text, sender_id)
         image_result = direct_image_router(user_text, sender_id)
 
-        # Үндсэн текстэн хариултын доор гарах "Quick Replies" товчлуурууд
         standard_buttons = [
             {"content_type": "text", "title": "🏠 Загварын сонголт", "payload": "PAYLOAD_MODEL"},
             {"content_type": "text", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"},
@@ -470,18 +468,15 @@ def process_ai_response(sender_id: str, user_text: str):
             add_to_history(sender_id, "assistant", reply)
 
             if show_carousel:
-                # Эхний мэндчилгээ зэрэг дээр дангаар нь явуулж картыг хавсаргана
                 send_fb_message(sender_id, reply)
                 send_carousel_menu(sender_id)
             else:
-                # Carousel гарахгүй үед буюу (үнэ, утас асуух) үед товчлуур нэмнэ
                 send_fb_message(sender_id, reply, quick_replies=standard_buttons)
                 
             if image_result:
                 send_images_by_keys(sender_id, image_result[:4])
             return
 
-        # Fallback to AI
         reply, image_keys = ask_groq(sender_id, user_text)
         add_to_history(sender_id, "user", user_text)
         add_to_history(sender_id, "assistant", reply)
@@ -535,14 +530,12 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
             
             user_text = ""
             if message and not message.get("is_echo"):
-                # Quick reply (доорх жижиг товч) дарсан эсэхийг шалгах
                 if "quick_reply" in message:
                     raw_payload = message["quick_reply"].get("payload", "").strip()
                     user_text = payload_map.get(raw_payload, raw_payload)
                 else:
                     user_text = message.get("text", "").strip()
             elif postback:
-                # Картны товчлуур дарсан эсэхийг шалгах
                 raw_payload = postback.get("payload", "").strip()
                 user_text = payload_map.get(raw_payload, raw_payload)
 
@@ -553,4 +546,4 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def root():
-    return {"status": "Miners Villa bot is running (Quick Replies added)"}
+    return {"status": "Miners Villa bot is running"}
