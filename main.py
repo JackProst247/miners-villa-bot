@@ -388,8 +388,8 @@ def send_carousel_menu(recipient_id: str):
     if not META_PAGE_ACCESS_TOKEN: return
     
     # Таны явуулсан 2 Facebook линк
-    card1_url = "https://miners-villa-bot.onrender.com/photo/general.png"
-    card2_url = "https://miners-villa-bot.onrender.com/photo/general.png"
+    card1_url = "https://share.google/mYuxKQMOCuRasHxT2"
+    card2_url = "https://share.google/AeMTc92c1cdv63D9u"
     
     payload = {
         "recipient": {"id": recipient_id},
