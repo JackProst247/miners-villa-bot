@@ -176,7 +176,7 @@ def resolve_photo_file(stem: str) -> Optional[Path]:
 
 def get_public_image_url(filename: str) -> str:
     # Энд байгаа хаягийг Render дээр өгсөн өөрийнхөө бодит хаягаар солино
-    base_url = "https://miners-villa-bot.onrender.com/photo/"
+    base_url = "https://miners-villa-bot.onrender.com/photo"
     return f"{base_url}/{quote(filename, safe='')}"
 
 def add_to_history(sender_id: str, role: str, text: str):
@@ -383,16 +383,13 @@ def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[D
     except Exception as e:
         print("Error sending text:", repr(e))
 
+
 def send_carousel_menu(recipient_id: str):
     if not META_PAGE_ACCESS_TOKEN: return
     
-    card1_path = resolve_photo_file(IMAGE_LIBRARY.get("GENERAL", "general"))
-    card1_filename = card1_path.name if card1_path else "general.jpg"
-    card1_url = get_public_image_url(card1_filename)
-
-    card2_path = resolve_photo_file(IMAGE_LIBRARY.get("GREEN_GARDEN", "Green_garden"))
-    card2_filename = card2_path.name if card2_path else "Green_garden.jpg"
-    card2_url = get_public_image_url(card2_filename)
+    # Таны явуулсан 2 Facebook линк
+    card1_url = "https://www.facebook.com/photo.php?fbid=122287820396131048&set=pb.61553931440696.-2207520000&type=3"
+    card2_url = "https://www.facebook.com/photo/?fbid=122285454974131048&set=pb.61553931440696.-2207520000"
     
     payload = {
         "recipient": {"id": recipient_id},
