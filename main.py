@@ -388,8 +388,8 @@ def send_carousel_menu(recipient_id: str):
     if not META_PAGE_ACCESS_TOKEN: return
     
     # Таны явуулсан 2 Facebook линк
-    card1_url = "https://www.facebook.com/photo.php?fbid=122287820396131048&set=pb.61553931440696.-2207520000&type=3"
-    card2_url = "https://www.facebook.com/photo/?fbid=122285454974131048&set=pb.61553931440696.-2207520000"
+    card1_url = "https://drive.google.com/file/d/1VePZV3l03yG436RCxpYdk59eDUlEhPLq/view?usp=sharing"
+    card2_url = "https://drive.google.com/file/d/1VePZV3l03yG436RCxpYdk59eDUlEhPLq/view?usp=sharing"
     
     payload = {
         "recipient": {"id": recipient_id},
