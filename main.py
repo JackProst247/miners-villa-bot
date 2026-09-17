@@ -400,7 +400,7 @@ def send_carousel_menu(recipient_id: str):
     
     # 2. Хоёр дахь картын зураг (Хэрэв 2 дахь зургаа бас жижгэрүүлээд .png болгосон бол ингэж тавина)
     # Жич: Хэрэв 2 дахь зураг чинь .jpg хэвээрээ байгаа бол Green_garden.jpg гэж бичээрэй
-    card2_url = "https://miners-villa-bot.onrender.com/photo/Green_garden.png" 
+    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png" 
     
     payload = {
         "recipient": {"id": recipient_id},
