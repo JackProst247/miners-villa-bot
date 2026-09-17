@@ -14,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from groq import Groq
 
 import requests, json
+import mimetypes
+
 
 # =========================================================
 # .env Тохиргоо
@@ -37,26 +39,32 @@ BASE_DIR = Path(__file__).resolve().parent
 PHOTO_FOLDER = BASE_DIR / "photo"
 PHOTO_FOLDER.mkdir(parents=True, exist_ok=True)
 
-# Зургийг заавал олж нээх тусгай маршрут
 @app.get("/photo/{filename}")
 async def get_photo(filename: str):
-    # 1. Шууд яг адил нэртэй файл хайх
+    # 1. Шууд хайх
     file_path = PHOTO_FOLDER / filename
     if file_path.is_file():
-        return FileResponse(file_path, headers={"Cache-Control": "public, max-age=31536000"})
-    
-    # 2. Том жижиг үсэг харгалзахгүй хайх
+        media_type, _ = mimetypes.guess_type(str(file_path))
+        return FileResponse(
+            file_path, 
+            media_type=media_type or "image/png",
+            headers={"Cache-Control": "public, max-age=31536000"}
+        )
+
+    # 2. Том жижиг үсэг харгалзахгүй
     target = filename.lower()
     for f in PHOTO_FOLDER.iterdir():
         if f.is_file() and f.name.lower() == target:
-            return FileResponse(f, headers={"Cache-Control": "public, max-age=31536000"})
-            
-    # 3. Файлын өргөтгөл харгалзахгүйгээр нэрээр нь хайх
+            media_type, _ = mimetypes.guess_type(str(f))
+            return FileResponse(f, media_type=media_type or "image/png", headers={"Cache-Control": "public, max-age=31536000"})
+
+    # 3. Өргөтгөлгүй хайх
     target_stem = Path(filename).stem.lower()
     for f in PHOTO_FOLDER.iterdir():
         if f.is_file() and f.stem.lower() == target_stem:
-            return FileResponse(f, headers={"Cache-Control": "public, max-age=31536000"})
-            
+            media_type, _ = mimetypes.guess_type(str(f))
+            return FileResponse(f, media_type=media_type or "image/png", headers={"Cache-Control": "public, max-age=31536000"})
+
     raise HTTPException(status_code=404, detail="Photo not found")
 
 
