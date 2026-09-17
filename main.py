@@ -5,7 +5,7 @@ import re
 import requests
 from pathlib import Path
 from urllib.parse import quote
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
@@ -41,7 +41,6 @@ PHOTO_FOLDER.mkdir(parents=True, exist_ok=True)
 
 @app.get("/photo/{filename}")
 async def get_photo(filename: str):
-    # 1. Шууд хайх
     file_path = PHOTO_FOLDER / filename
     if file_path.is_file():
         media_type, _ = mimetypes.guess_type(str(file_path))
@@ -51,14 +50,12 @@ async def get_photo(filename: str):
             headers={"Cache-Control": "public, max-age=31536000"}
         )
 
-    # 2. Том жижиг үсэг харгалзахгүй
     target = filename.lower()
     for f in PHOTO_FOLDER.iterdir():
         if f.is_file() and f.name.lower() == target:
             media_type, _ = mimetypes.guess_type(str(f))
             return FileResponse(f, media_type=media_type or "image/png", headers={"Cache-Control": "public, max-age=31536000"})
 
-    # 3. Өргөтгөлгүй хайх
     target_stem = Path(filename).stem.lower()
     for f in PHOTO_FOLDER.iterdir():
         if f.is_file() and f.stem.lower() == target_stem:
@@ -184,7 +181,6 @@ def resolve_photo_file(stem: str) -> Optional[Path]:
     return None
 
 def get_public_image_url(filename: str) -> str:
-    # Энд байгаа хаягийг Render дээр өгсөн өөрийнхөө бодит хаягаар солино
     base_url = "https://miners-villa-bot.onrender.com/photo"
     return f"{base_url}/{quote(filename, safe='')}"
 
@@ -236,33 +232,20 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
     parking_kws = ["зогсоол", "гараж", "гараш", "гарааш", "zogsool", "garaash", "garaj"]
     if match_any(parking_kws, t): return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
 
-    photo_only_kws = ["зураг", "зураг үзье", "zurag", "photo"]
-    if match_any(photo_only_kws, t):
-        hist_text = normalize_text(history_text(sender_id))
-        if match_any(["таун", "townhouse"], hist_text): return ["TOWNHOUSE_212", "TOWNHOUSE_266"]
-        if match_any(["мульт", "mult"], hist_text): return ["MULT", "MULT_125"]
-        return ["GENERAL_PLAN"]
-
     return None
 
 
 # =========================================================
-# DIRECT FAQ ROUTER (Returns text, show_carousel, custom_quick_replies)
+# DIRECT FAQ ROUTER
 # =========================================================
 
-def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str, bool, Optional[List[Dict]]]]:
+def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str, Any, Optional[List[Dict]]]]:
     t = normalize_text(user_text)
 
     default_buttons = [
         {"content_type": "text", "title": "🏡 Таун хаус", "payload": "PAYLOAD_TOWN"},
         {"content_type": "text", "title": "🏢 Мульт хаус", "payload": "PAYLOAD_MULT"},
         {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"}
-    ]
-
-    model_buttons = [
-        {"content_type": "text", "title": "🏡 Таун хаус", "payload": "PAYLOAD_TOWN"},
-        {"content_type": "text", "title": "🏢 Мульт хаус", "payload": "PAYLOAD_MULT"},
-        {"content_type": "text", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
     ]
 
     # 1. Мэндчилгээ болон Эхлэл
@@ -276,39 +259,13 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
         )
         return (reply, True, None)
 
-    # 2. Таун хаус сонгох үед
-    if match_any(["таун хаус", "таунхаус", "таун", "taun", "townhouse"], t):
-        reply = (
-            "🏡 **Таун хаус (Townhouse)**\n\n"
-            "• Сонголт: 213.33 м², 267.48 м²\n"
-            "• Үнэ: м² нь 5,500,000 – 5,800,000 ₮\n"
-            "• Онцлог: Дээд зэрэглэлийн тав тухтай амины орон сууц.\n\n"
-            "Дэлгэрэнгүй зургуудыг доор харууллаа 👇"
-        )
-        return (reply, False, model_buttons)
-
-    # 3. Мульт хаус сонгох үед
-    if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "мулт"], t):
-        reply = (
-            "🏢 **Мульт хаус (Multi-family house)**\n\n"
-            "• Сонголт: 125.21 м², 126 м², 136.42 м², 178.39 м², 189.52 м², 189.64 м², 192.25 м², 198.52 м²\n"
-            "• Үнэ: м² нь 5,500,000 – 5,800,000 ₮\n\n"
-            "Сонирхож буй м²-ээ бичиж (жишээ нь: 126 эсвэл 178) дэлгэрэнгүй зураг авах боломжтой 😊"
-        )
-        return (reply, False, model_buttons)
-
-    # 4. Загварын сонголт / мкв / хэмжээ
-    model_keywords = ["сонголт", "загвар", "хэмжээ", "мкв", "м2", "квадрат", "songolt", "zagvar", "mkv"]
+    # 2. Загварын сонголт / Таун хаус / Мульт хаус (Том карт хэлбэрээр харуулах)
+    model_keywords = ["сонголт", "загвар", "хэмжээ", "мкв", "м2", "квадрат", "songolt", "zagvar", "mkv", "таун хаус", "таунхаус", "таун", "taun", "townhouse", "мульт хаус", "мультхаус", "мульт", "mult", "мулт"]
     if match_any(model_keywords, t):
-        reply = (
-            "Манай төслийн загварын сонголтууд:\n\n"
-            "🏡 Таун хаус: 213.33 м², 267.48 м²\n"
-            "🏢 Мульт хаус: 125.21 м², 126 м², 136.42 м², 178.39 м², 189.52 м², 189.64 м², 192.25 м², 198.52 м²\n\n"
-            "(Сингл болон Твин хаусны борлуулалт дууссан). Доорх товчлуураар загвараа сонгоно уу 👇"
-        )
-        return (reply, False, model_buttons)
+        reply = "Манай төслийн загварын сонголтууд (Таун болон Мульт хаус)-ыг доорх картуудаас үзнэ үү 👇"
+        return (reply, "MODEL", None)
 
-    # 5. Үнэ
+    # 3. Үнэ
     price_keywords = ["үнэ", "үнийн", "үнэтэй", "м2 үнэ", "une", "vne", "xed", "hed"]
     if match_any(price_keywords, t):
         reply = (
@@ -318,17 +275,17 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
         )
         return (reply, False, default_buttons)
 
-    # 6. Байршил
+    # 4. Байршил
     location_keywords = ["байршил", "хаана байдаг", "хаана вэ", "bairshil", "haana"]
     if match_any(location_keywords, t):
         return (f"Miners Villa нь {LOCATION_TEXT} Дэлгэрэнгүйг: {SALES_PHONE} 😊", False, default_buttons)
 
-    # 7. Утас
+    # 5. Утас
     phone_keywords = ["утас", "дугаар", "холбоо барих", "залгах", "utas", "dugaar"]
     if match_any(phone_keywords, t) and not match_any(["оффис"], t):
         return (f"Манай борлуулалтын утас: {SALES_PHONE} 😊", False, default_buttons)
 
-    # 8. Мэдээлэл
+    # 6. Мэдээлэл
     info_keywords = ["мэдээлэл", "дэлгэрэнгүй", "танилцуулга", "medeelel", "taniltsuulga"]
     if match_any(info_keywords, t) and len(t.split()) <= 4:
         reply = (
@@ -341,7 +298,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
         )
         return (reply, False, default_buttons)
         
-    # 9. Онцлог
+    # 7. Онцлог
     features_keywords = ["онцлог", "давуу тал", "ялгаа", "ontslog", "davuu tal"]
     if match_any(features_keywords, t):
         reply = (
@@ -354,17 +311,17 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
         )
         return (reply, False, default_buttons)
 
-    # 10. Төлбөрийн нөхцөл
+    # 8. Төлбөрийн нөхцөл
     payment_keywords = ["төлбөр", "төлбөрийн нөхцөл", "урьдчилгаа", "tulbur", "urdchilgaa"]
     if match_any(payment_keywords, t):
         return (PAYMENT_TEXT, False, default_buttons)
         
-    # 11. Зогсоол
+    # 9. Зогсоол
     parking_keywords = ["зогсоол", "гарааш", "б1", "zogsool", "garaash"]
     if match_any(parking_keywords, t):
         return (PARKING_TEXT, False, default_buttons)
         
-    # 12. Ашиглалтад орох
+    # 10. Ашиглалтад орох
     completion_keywords = ["ашиглалт", "хэзээ орох", "ashiglalt", "hezee oroh"]
     if match_any(completion_keywords, t):
         return ("2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна. Дэлгэрэнгүйг 9430-7017 дугаараас лавлана уу 😊", False, default_buttons)
@@ -395,11 +352,7 @@ def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[D
 def send_carousel_menu(recipient_id: str):
     if not META_PAGE_ACCESS_TOKEN: return
     
-    # 1. Эхний картын зураг (Таны саяын оруулсан линк)
     card1_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png"
-    
-    # 2. Хоёр дахь картын зураг (Хэрэв 2 дахь зургаа бас жижгэрүүлээд .png болгосон бол ингэж тавина)
-    # Жич: Хэрэв 2 дахь зураг чинь .jpg хэвээрээ байгаа бол Green_garden.jpg гэж бичээрэй
     card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png" 
     
     payload = {
@@ -440,6 +393,49 @@ def send_carousel_menu(recipient_id: str):
         requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
     except Exception as e:
         print("Error sending Carousel:", repr(e))
+
+def send_model_carousel(recipient_id: str):
+    if not META_PAGE_ACCESS_TOKEN: return
+
+    town_url = "https://miners-villa-bot.onrender.com/photo/townhouse_212.png"
+    mult_url = "https://miners-villa-bot.onrender.com/photo/mult_125.png"
+
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {
+            "attachment": {
+                "type": "template",
+                "payload": {
+                    "template_type": "generic",
+                    "elements": [
+                        {
+                            "title": "🏡 ТАУН ХАУС (Townhouse)",
+                            "subtitle": "Сонголт: 213.33 м², 267.48 м²\nҮнэ: м² нь 5.5М - 5.8М ₮",
+                            "image_url": town_url,
+                            "buttons": [
+                                {"type": "postback", "title": "🏡 Таун хаус үзэх", "payload": "PAYLOAD_TOWN"},
+                                {"type": "postback", "title": "💰 Үнэ харах", "payload": "PAYLOAD_PRICE"}
+                            ]
+                        },
+                        {
+                            "title": "🏢 МУЛЬТ ХАУС (Multi-family)",
+                            "subtitle": "Сонголт: 125 м² - 198 м² хүртэл\nҮнэ: м² нь 5.5М - 5.8М ₮",
+                            "image_url": mult_url,
+                            "buttons": [
+                                {"type": "postback", "title": "🏢 Мульт хаус үзэх", "payload": "PAYLOAD_MULT"},
+                                {"type": "postback", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    try:
+        requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+    except Exception as e:
+        print("Error sending Model Carousel:", repr(e))
 
 def send_images_by_keys(recipient_id: str, image_keys: List[str]):
     if not image_keys or not META_PAGE_ACCESS_TOKEN: return
@@ -540,9 +536,12 @@ def process_ai_response(sender_id: str, user_text: str):
             add_to_history(sender_id, "user", user_text)
             add_to_history(sender_id, "assistant", reply)
 
-            if show_carousel:
+            if show_carousel == True:
                 send_fb_message(sender_id, reply)
                 send_carousel_menu(sender_id)
+            elif show_carousel == "MODEL":
+                send_fb_message(sender_id, reply)
+                send_model_carousel(sender_id)
             else:
                 send_fb_message(sender_id, reply, quick_replies=custom_buttons or default_buttons)
                 
@@ -598,7 +597,7 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
     for entry in data.get("entry", []):
         for messaging_event in entry.get("messaging", []):
-            sender_id = messaging_event.get("sender", {}).get("id")
+            sender_id = messaging_event.get("sender", {}).id if hasattr(messaging_event.get("sender", {}), "get") else messaging_event.get("sender", {}).get("id")
             
             message = messaging_event.get("message")
             postback = messaging_event.get("postback")
