@@ -597,7 +597,8 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
     for entry in data.get("entry", []):
         for messaging_event in entry.get("messaging", []):
-            sender_id = messaging_event.get("sender", {}).id if hasattr(messaging_event.get("sender", {}), "get") else messaging_event.get("sender", {}).get("id")
+            # АЛДАА ЗАСАГДСАН ХЭСЭГ: dictionary-гээс .get("id") ашиглан найдвартай авна
+            sender_id = messaging_event.get("sender", {}).get("id")
             
             message = messaging_event.get("message")
             postback = messaging_event.get("postback")
