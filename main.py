@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from groq import Groq
 
+import requests, json
 
 # =========================================================
 # .env Тохиргоо
@@ -383,13 +384,8 @@ def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[D
     except Exception as e:
         print("Error sending text:", repr(e))
 
-
 def send_carousel_menu(recipient_id: str):
-    if not META_PAGE_ACCESS_TOKEN: return
-    
-    # Таны явуулсан 2 Facebook линк
-    card1_url = "https://miners-villa-bot.onrender.com/photo/general.png"
-    card2_url = "https://miners-villa-bot.onrender.com/photo/general.png"
+    url = f"https://graph.facebook.com/v19.0/me/messages?access_token={META_PAGE_ACCESS_TOKEN}"
     
     payload = {
         "recipient": {"id": recipient_id},
@@ -401,22 +397,12 @@ def send_carousel_menu(recipient_id: str):
                     "elements": [
                         {
                             "title": "MINERS VILLA ТӨСӨЛ",
-                            "subtitle": "Тав тух, үнэ цэнийн илэрхийлэл болсон хотхон",
-                            "image_url": card1_url,
+                            "subtitle": "Тав тух, үнэ цэнийн илэрхийлэл",
+                            "image_url": "https://miners-villa-bot.onrender.com/photo/general.png",
                             "buttons": [
                                 {"type": "postback", "title": "💰 Үнийн мэдээлэл", "payload": "PAYLOAD_PRICE"},
                                 {"type": "postback", "title": "ℹ️ Ерөнхий танилцуулга", "payload": "PAYLOAD_INFO"},
                                 {"type": "postback", "title": "🏠 Загварын сонголт", "payload": "PAYLOAD_MODEL"}
-                            ]
-                        },
-                        {
-                            "title": "MINERS VILLA ТӨСӨЛ",
-                            "subtitle": "Хүн бүхэнд нээлттэй амины орон сууцны цогцолбор",
-                            "image_url": card2_url,
-                            "buttons": [
-                                {"type": "postback", "title": "📍 Төслийн байршил", "payload": "PAYLOAD_LOCATION"},
-                                {"type": "postback", "title": "🌳 Төслийн онцлог", "payload": "PAYLOAD_FEATURES"},
-                                {"type": "postback", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
                             ]
                         }
                     ]
@@ -425,10 +411,9 @@ def send_carousel_menu(recipient_id: str):
         }
     }
     
-    try:
-        requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-    except Exception as e:
-        print("Error sending Carousel:", repr(e))
+    r = requests.post(url, json=payload)
+    print("FB RESPONSE:", r.status_code, r.text) # ЭНЭ ХАМГИЙН ЧУХАЛ
+
 
 def send_images_by_keys(recipient_id: str, image_keys: List[str]):
     if not image_keys or not META_PAGE_ACCESS_TOKEN: return
