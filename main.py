@@ -396,11 +396,11 @@ def send_carousel_menu(recipient_id: str):
     if not META_PAGE_ACCESS_TOKEN: return
     
     # 1. Эхний картын зураг (Таны саяын оруулсан линк)
-    card1_url = "https://miners-villa-bot.onrender.com/photo/general.png"
+    card1_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png?v=1"
     
     # 2. Хоёр дахь картын зураг (Хэрэв 2 дахь зургаа бас жижгэрүүлээд .png болгосон бол ингэж тавина)
     # Жич: Хэрэв 2 дахь зураг чинь .jpg хэвээрээ байгаа бол Green_garden.jpg гэж бичээрэй
-    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png" 
+    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png?v=1" 
     
     payload = {
         "recipient": {"id": recipient_id},
