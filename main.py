@@ -225,8 +225,11 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         return ["TOWNHOUSE_212", "TOWNHOUSE_266", "TOWNHOUSE_212_1", "TOWNHOUSE_266_1"]
 
     if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "мулт"], t): 
-        return ["MULT", "MULT_100", "MULT_116", "MULT_120", "MULT_125", "MULT_126_32", "MULT_126", "MULT_136", "MULT_178", "MULT_189", "MULT_189_64", "MULT_192", "MULT_198"]
-
+        return [
+            "MULT", "MULT_100", "MULT_116", "MULT_120", "MULT_125", 
+            "MULT_126", "MULT_126_32", "MULT_136", "MULT_178", 
+            "MULT_189", "MULT_189_64", "MULT_192", "MULT_198"
+        ]
     parking_kws = ["зогсоол", "гараж", "гараш", "гарааш", "zogsool", "garaash", "garaj"]
     if match_any(parking_kws, t): return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
 
