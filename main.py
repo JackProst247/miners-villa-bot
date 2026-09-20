@@ -250,7 +250,7 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
     ]
 
     # 1. Мэндчилгээ болон Эхлэл
-    greetings = ["сайн уу", "сайн байна уу", "hello", "hi", "мэнд", "get started", "start", "эхлэх"]
+    greetings = ["сайн уу", "сайн байна уу", "hello", "hi", "мэнд", "get started", "start", "snu", "сну", "сээноо", "эхлэх"]
     if match_any(greetings, t) and len(t.split()) <= 4:
         reply = (
             "Сайн байна уу? Тав тух, үнэ цэнийн илэрхийлэл болсон 'Miners Villa' төслийн "
