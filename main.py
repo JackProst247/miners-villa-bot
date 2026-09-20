@@ -222,7 +222,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
     if re.search(r"\b(266|267)\b", t): return ["TOWNHOUSE_266", "TOWNHOUSE_266_1", "GENERAL_PLAN"]
 
     if match_any(["таун хаус", "таунхаус", "таун", "taun", "townhouse"], t): 
-        return ["TOWNHOUSE_212", "TOWNHOUSE_266", "GENERAL_PLAN"]
+        return ["TOWNHOUSE_212", "TOWNHOUSE_266", "TOWNHOUSE_212_1", "TOWNHOUSE_266_1"]
 
     if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "мулт"], t): 
         return ["MULT_100", "MULT_116", "MULT_120", "MULT_125", "MULT_126", "MULT_136", "MULT_178", "MULT_189", "MULT_192", "MULT_198"]
