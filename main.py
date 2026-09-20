@@ -351,7 +351,7 @@ def send_carousel_menu(recipient_id: str, quick_replies: Optional[List[Dict]] = 
     if not META_PAGE_ACCESS_TOKEN: return
     
     card1_url = "https://miners-villa-bot.onrender.com/photo/general.png?v=3"
-    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png?v=3" 
+    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png" 
     
     payload = {
         "recipient": {"id": recipient_id},
