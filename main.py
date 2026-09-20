@@ -445,45 +445,64 @@ def send_model_carousel(recipient_id: str, quick_replies: Optional[List[Dict]] =
         print("Error sending Model Carousel:", repr(e))
 
 def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies: Optional[List[Dict]] = None):
-    if not image_keys or not META_PAGE_ACCESS_TOKEN: return
+    if not image_keys or not META_PAGE_ACCESS_TOKEN:
+        print("❌ Грешка: Липсват image_keys или META_PAGE_ACCESS_TOKEN")
+        return
 
     elements = []
     seen = set()
-    for key in image_keys[:12]:
-        if key in seen or key not in IMAGE_LIBRARY: continue
+    for key in image_keys:
+        if key in seen or key not in IMAGE_LIBRARY:
+            continue
         seen.add(key)
         stem = IMAGE_LIBRARY[key]
         local_path = resolve_photo_file(stem)
 
         if local_path and local_path.is_file():
             public_url = get_public_image_url(local_path.name)
-            if public_url:
-                elements.append({
-                    "title": f"Miners Villa - {key.replace('_', ' ')}",
-                    "image_url": public_url,
-                    "buttons": [{"type": "web_url", "url": public_url, "title": "🔍 Томруулж харах"}]
-                })
+            print(f"📸 Намерена снимка: {key} -> {public_url}")
+            elements.append({
+                "title": f"Miners Villa - {key.replace('_', ' ')}",
+                "image_url": public_url,
+                "buttons": [{"type": "web_url", "url": public_url, "title": "🔍 Томруулж харах"}]
+            })
+        else:
+            print(f"⚠️ Файлът НЕ Е намерен за ключ: {key} (stem: {stem})")
 
-    if not elements: return
+    if not elements:
+        print("❌ Няма налични елементи/снимки за изпращане!")
+        send_fb_message(
+            recipient_id, 
+            "⚠️ Уучлаарай, одоогоор энэ загварын зургууд системд оруулаагүй байна.", 
+            quick_replies=quick_replies
+        )
+        return
 
-    payload = {
-        "recipient": {"id": recipient_id},
-        "message": {
-            "attachment": {
-                "type": "template",
-                "payload": {"template_type": "generic", "elements": elements}
+    # Разделяне на снимките в пакети по 5 броя
+    chunks = [elements[i:i + 5] for i in range(0, len(elements), 5)]
+
+    for i, chunk in enumerate(chunks):
+        payload = {
+            "recipient": {"id": recipient_id},
+            "message": {
+                "attachment": {
+                    "type": "template",
+                    "payload": {"template_type": "generic", "elements": chunk}
+                }
             }
         }
-    }
-    
-    if quick_replies:
-        payload["message"]["quick_replies"] = quick_replies
 
-    try:
-        requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-    except Exception as e:
-        print("Error sending images:", repr(e))
+        # Добавяне на бързите бутони към последния пакет
+        if quick_replies and i == len(chunks) - 1:
+            payload["message"]["quick_replies"] = quick_replies
 
+        try:
+            res = requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+            print(f"📡 Facebook API Статус [Пакет {i+1}]: {res.status_code} - {res.text}")
+        except Exception as e:
+            print(f"❌ Грешка при изпращане на пакет {i+1}:", repr(e))
+        
+        time.sleep(0.5)
 
 # =========================================================
 # GROQ AI (META LLAMA 3)
