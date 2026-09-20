@@ -12,8 +12,6 @@ from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from groq import Groq
-
-import requests, json
 import mimetypes
 
 
@@ -227,7 +225,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         return ["TOWNHOUSE_212", "TOWNHOUSE_266", "GENERAL_PLAN"]
 
     if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "мулт"], t): 
-        return ["MULT", "MULT_125", "MULT_126"]
+        return ["MULT", "MULT_100", "MULT_125", "MULT_126"]
 
     parking_kws = ["зогсоол", "гараж", "гараш", "гарааш", "zogsool", "garaash", "garaj"]
     if match_any(parking_kws, t): return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
@@ -259,8 +257,8 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
         )
         return (reply, True, None)
 
-    # 2. Загварын сонголт / Таун хаус / Мульт хаус (Том карт хэлбэрээр харуулах)
-    model_keywords = ["сонголт", "загвар", "хэмжээ", "мкв", "м2", "квадрат", "songolt", "zagvar", "mkv", "таун хаус", "таунхаус", "таун", "taun", "townhouse", "мульт хаус", "мультхаус", "мульт", "mult", "мулт"]
+    # 2. Загварын сонголт / Том карт хэлбэрээр харуулах
+    model_keywords = ["сонголт", "загвар", "хэмжээ", "мкв", "м2", "квадрат", "songolt", "zagvar", "mkv"]
     if match_any(model_keywords, t):
         reply = "Манай төслийн загварын сонголтууд (Таун болон Мульт хаус)-ыг доорх картуудаас үзнэ үү 👇"
         return (reply, "MODEL", None)
@@ -349,11 +347,11 @@ def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[D
     except Exception as e:
         print("Error sending text:", repr(e))
 
-def send_carousel_menu(recipient_id: str):
+def send_carousel_menu(recipient_id: str, quick_replies: Optional[List[Dict]] = None):
     if not META_PAGE_ACCESS_TOKEN: return
     
-    card1_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png"
-    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png" 
+    card1_url = "https://miners-villa-bot.onrender.com/photo/general.png?v=3"
+    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png?v=3" 
     
     payload = {
         "recipient": {"id": recipient_id},
@@ -389,16 +387,19 @@ def send_carousel_menu(recipient_id: str):
         }
     }
     
+    if quick_replies:
+        payload["message"]["quick_replies"] = quick_replies
+
     try:
         requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
     except Exception as e:
         print("Error sending Carousel:", repr(e))
 
-def send_model_carousel(recipient_id: str):
+def send_model_carousel(recipient_id: str, quick_replies: Optional[List[Dict]] = None):
     if not META_PAGE_ACCESS_TOKEN: return
 
-    town_url = "https://miners-villa-bot.onrender.com/photo/townhouse_212.png"
-    mult_url = "https://miners-villa-bot.onrender.com/photo/mult_125.png"
+    town_url = "https://miners-villa-bot.onrender.com/photo/townhouse_266.png?v=1"
+    mult_url = "https://miners-villa-bot.onrender.com/photo/mult.png?v=1"
 
     payload = {
         "recipient": {"id": recipient_id},
@@ -432,12 +433,15 @@ def send_model_carousel(recipient_id: str):
         }
     }
 
+    if quick_replies:
+        payload["message"]["quick_replies"] = quick_replies
+
     try:
         requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
     except Exception as e:
         print("Error sending Model Carousel:", repr(e))
 
-def send_images_by_keys(recipient_id: str, image_keys: List[str]):
+def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies: Optional[List[Dict]] = None):
     if not image_keys or not META_PAGE_ACCESS_TOKEN: return
 
     elements = []
@@ -468,6 +472,9 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str]):
             }
         }
     }
+    
+    if quick_replies:
+        payload["message"]["quick_replies"] = quick_replies
 
     try:
         requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
@@ -538,24 +545,27 @@ def process_ai_response(sender_id: str, user_text: str):
 
             if show_carousel == True:
                 send_fb_message(sender_id, reply)
-                send_carousel_menu(sender_id)
+                send_carousel_menu(sender_id, quick_replies=default_buttons)
             elif show_carousel == "MODEL":
                 send_fb_message(sender_id, reply)
-                send_model_carousel(sender_id)
+                send_model_carousel(sender_id, quick_replies=default_buttons)
             else:
-                send_fb_message(sender_id, reply, quick_replies=custom_buttons or default_buttons)
-                
-            if image_result:
-                send_images_by_keys(sender_id, image_result[:4])
+                if image_result:
+                    send_fb_message(sender_id, reply)
+                    send_images_by_keys(sender_id, image_result[:4], quick_replies=custom_buttons or default_buttons)
+                else:
+                    send_fb_message(sender_id, reply, quick_replies=custom_buttons or default_buttons)
             return
 
         reply, image_keys = ask_groq(sender_id, user_text)
         add_to_history(sender_id, "user", user_text)
         add_to_history(sender_id, "assistant", reply)
 
-        send_fb_message(sender_id, reply, quick_replies=default_buttons)
         if image_keys:
-            send_images_by_keys(sender_id, image_keys[:4])
+            send_fb_message(sender_id, reply)
+            send_images_by_keys(sender_id, image_keys[:4], quick_replies=default_buttons)
+        else:
+            send_fb_message(sender_id, reply, quick_replies=default_buttons)
 
     except Exception as e:
         print("Response Process Error:", repr(e))
@@ -597,9 +607,7 @@ async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
 
     for entry in data.get("entry", []):
         for messaging_event in entry.get("messaging", []):
-            # АЛДАА ЗАСАГДСАН ХЭСЭГ: dictionary-гээс .get("id") ашиглан найдвартай авна
             sender_id = messaging_event.get("sender", {}).get("id")
-            
             message = messaging_event.get("message")
             postback = messaging_event.get("postback")
             
