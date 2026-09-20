@@ -225,7 +225,7 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
         return ["TOWNHOUSE_212", "TOWNHOUSE_266", "GENERAL_PLAN"]
 
     if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "мулт"], t): 
-        return ["MULT", "MULT_100", "MULT_125", "MULT_126"]
+        return ["MULT_100", "MULT_116", "MULT_120", "MULT_125", "MULT_126", "MULT_136", "MULT_178", "MULT_189", "MULT_192", "MULT_198"]
 
     parking_kws = ["зогсоол", "гараж", "гараш", "гарааш", "zogsool", "garaash", "garaj"]
     if match_any(parking_kws, t): return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
@@ -446,7 +446,7 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies:
 
     elements = []
     seen = set()
-    for key in image_keys[:4]:
+    for key in image_keys[:12]:
         if key in seen or key not in IMAGE_LIBRARY: continue
         seen.add(key)
         stem = IMAGE_LIBRARY[key]
@@ -552,7 +552,7 @@ def process_ai_response(sender_id: str, user_text: str):
             else:
                 if image_result:
                     send_fb_message(sender_id, reply)
-                    send_images_by_keys(sender_id, image_result[:4], quick_replies=custom_buttons or default_buttons)
+                    send_images_by_keys(sender_id, image_result[:12], quick_replies=custom_buttons or default_buttons)
                 else:
                     send_fb_message(sender_id, reply, quick_replies=custom_buttons or default_buttons)
             return
@@ -563,7 +563,7 @@ def process_ai_response(sender_id: str, user_text: str):
 
         if image_keys:
             send_fb_message(sender_id, reply)
-            send_images_by_keys(sender_id, image_keys[:4], quick_replies=default_buttons)
+            send_images_by_keys(sender_id, image_keys[:12], quick_replies=default_buttons)
         else:
             send_fb_message(sender_id, reply, quick_replies=default_buttons)
 
