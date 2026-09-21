@@ -2,64 +2,168 @@ import os
 import json
 import time
 import re
-import requests
+import mimetypes
 from pathlib import Path
 from urllib.parse import quote
 from typing import Dict, List, Optional, Tuple, Any
 
+import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from groq import Groq
-import mimetypes
 
 
 # =========================================================
-# .env Тохиргоо
+# ENVIRONMENT
 # =========================================================
 
 load_dotenv()
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
-META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+VERIFY_TOKEN = os.getenv(
+    "VERIFY_TOKEN",
+    "miners_villa_secret_123"
+)
+
+META_PAGE_ACCESS_TOKEN = os.getenv(
+    "META_PAGE_ACCESS_TOKEN"
+)
+
+GROQ_API_KEY = os.getenv(
+    "GROQ_API_KEY"
+)
+
+GROQ_MODEL = os.getenv(
+    "GROQ_MODEL",
+    "llama-3.3-70b-versatile"
+)
+
+PUBLIC_BASE_URL = os.getenv(
+    "PUBLIC_BASE_URL",
+    "https://miners-villa-bot.onrender.com"
+).rstrip("/")
+
 
 # =========================================================
-# APP + PHOTO ROUTE (Case-Insensitive & Reliable)
+# FASTAPI APP
 # =========================================================
 
-app = FastAPI(title="Miners Villa Messenger Bot")
+app = FastAPI(
+    title="Miners Villa Messenger Bot",
+    version="2.0.0"
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 PHOTO_FOLDER = BASE_DIR / "photo"
-PHOTO_FOLDER.mkdir(parents=True, exist_ok=True)
 
-@app.get("/photo/{filename}")
-async def get_photo(filename: str):
-    file_path = PHOTO_FOLDER / filename
-    if file_path.is_file():
-        media_type, _ = mimetypes.guess_type(str(file_path))
-        return FileResponse(
-            file_path, 
-            media_type=media_type or "image/png",
-            headers={"Cache-Control": "public, max-age=31536000"}
-        )
+PHOTO_FOLDER.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
-    target = filename.lower()
-    for f in PHOTO_FOLDER.iterdir():
-        if f.is_file() and f.name.lower() == target:
-            media_type, _ = mimetypes.guess_type(str(f))
-            return FileResponse(f, media_type=media_type or "image/png", headers={"Cache-Control": "public, max-age=31536000"})
 
-    target_stem = Path(filename).stem.lower()
-    for f in PHOTO_FOLDER.iterdir():
-        if f.is_file() and f.stem.lower() == target_stem:
-            media_type, _ = mimetypes.guess_type(str(f))
-            return FileResponse(f, media_type=media_type or "image/png", headers={"Cache-Control": "public, max-age=31536000"})
+# =========================================================
+# MINERS VILLA DATA
+# =========================================================
 
-    raise HTTPException(status_code=404, detail="Photo not found")
+PRICE_MIN = 5_500_000
+PRICE_MAX = 5_800_000
+
+SALES_PHONE = "9430-7017"
+
+SALES_OFFICE = (
+    "Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, "
+    "төв зам дагуу"
+)
+
+LOCATION_TEXT = (
+    "Баян-Өндөр уулын зүүн энгэрт, "
+    "Бүсийн оношилгооны төвийн ард, "
+    "Медипас эмнэлгийн ард, "
+    "30.8 га талбайд байрладаг."
+)
+
+PAYMENT_TEXT = (
+    "30% урьдчилгаа, 40% явцын төлбөр, "
+    "20% явцын төлбөр, 10% түлхүүр гардуулах үед. "
+    "Явцын төлбөрт зөвхөн байрны бартер сонсоно."
+)
+
+PARKING_TEXT = (
+    "Мульт хаусын Б1 болон 1-р давхарт "
+    "нэгдсэн дулаан зогсоол байрлана. "
+    "Зогсоолын үнэ 50,000,000 ₮."
+)
+
+UNKNOWN_TEXT = (
+    "Уучлаарай, би энэ асуултыг сайн ойлгосонгүй. "
+    "Та асуултаа арай дэлгэрэнгүй бичнэ үү, "
+    f"эсвэл манай борлуулалтын албатай {SALES_PHONE} "
+    "дугаараар холбогдон лавлах боломжтой 😊"
+)
+
+
+# =========================================================
+# PROJECT KNOWLEDGE
+# =========================================================
+
+PROJECT_KNOWLEDGE = f"""
+MINERS VILLA ТӨСЛИЙН БАТАЛГААТ МЭДЭЭЛЭЛ:
+
+1. ТӨСЛИЙН НЭР
+Miners Villa.
+
+2. БАЙРШИЛ
+{LOCATION_TEXT}
+
+3. ТАЛБАЙ
+Нийт 30.8 га талбайд байрладаг.
+
+4. М² ҮНЭ
+М² үнэ:
+{PRICE_MIN:,} - {PRICE_MAX:,} ₮.
+
+5. ЗАГВАРУУД
+Таун хаус:
+- 213.33 м²
+- 267.48 м²
+
+Мульт хаус:
+- 125.21 м² - 198.52 м² хүртэл.
+
+Сингл болон Твин загварууд дууссан.
+
+6. ТӨЛБӨРИЙН НӨХЦӨЛ
+{PAYMENT_TEXT}
+
+7. ЗОГСООЛ
+{PARKING_TEXT}
+
+8. ДЭД БҮТЭЦ
+- Төвийн дулаан
+- Цахилгаан
+- Цэвэр ус
+- Бохирын шугам
+
+9. ТӨСЛИЙН ОНЦЛОГ
+- 24 цагийн харуул хамгаалалт
+- 2.2 км хүрээлсэн хашаа
+- Автомашингүй ногоон бүс
+- Байгалийн гэрэлтүүлэг сайтай
+- Насны онцлогт тохирсон 4 төрлийн тоглоомын талбай
+- Ойролцоогоор 400 автомашины нэгдсэн дулаан зогсоол
+- 30.8 га талбайн 60% нь ногоон байгууламж
+
+10. АШИГЛАЛТАД ОРОХ
+2026 оны өвөл дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна.
+Яг ашиглалтад орох огноог зохиож хэлж болохгүй.
+
+11. БОРЛУУЛАЛТЫН УТАС
+{SALES_PHONE}
+
+12. БОРЛУУЛАЛТЫН ОФФИС
+{SALES_OFFICE}
+"""
 
 
 # =========================================================
@@ -69,16 +173,20 @@ async def get_photo(filename: str):
 IMAGE_LIBRARY = {
     "GENERAL": "general",
     "GENERAL_PLAN": "general_plan",
+
     "GREEN_GARDEN": "Green_garden",
     "LANDSCAPING": "landscaping",
     "RELAXATION_AREA": "relaxation_area",
+
     "SPORTS_AREA_0_5": "sports_area_0-5",
     "SPORTS_AREA_9_13": "sports_area_9-13",
     "SPORTS_AREA_13_16": "sports_area_13-16",
     "SPORTS_AREA_PLAN": "sports_area_plan",
+
     "MULT": "mult",
     "MULT_PARKING_SPACE": "mult_parking_space",
     "MULT_PARKING_SPACE_1": "mult_parking_space_1",
+
     "MULT_100": "mult_100",
     "MULT_116": "mult_116",
     "MULT_120": "mult_120",
@@ -91,13 +199,14 @@ IMAGE_LIBRARY = {
     "MULT_189_64": "mult_189_64",
     "MULT_192": "mult_192",
     "MULT_198": "mult_198",
+
     "TOWNHOUSE_212": "townhouse_212",
     "TOWNHOUSE_212_1": "townhouse_212_1",
     "TOWNHOUSE_266": "townhouse_266",
     "TOWNHOUSE_266_1": "townhouse_266_1",
 }
 
-IMAGE_KEYS = list(IMAGE_LIBRARY.keys())
+IMAGE_KEYS = set(IMAGE_LIBRARY.keys())
 
 
 # =========================================================
@@ -105,136 +214,464 @@ IMAGE_KEYS = list(IMAGE_LIBRARY.keys())
 # =========================================================
 
 CONVERSATIONS: Dict[str, List[Dict[str, str]]] = {}
+
 MAX_HISTORY = 8
 
 
+def add_to_history(
+    sender_id: str,
+    role: str,
+    text: str
+):
+    history = CONVERSATIONS.setdefault(
+        sender_id,
+        []
+    )
+
+    history.append({
+        "role": role,
+        "text": text
+    })
+
+    if len(history) > MAX_HISTORY:
+        CONVERSATIONS[sender_id] = history[-MAX_HISTORY:]
+
+
+def history_text(
+    sender_id: str
+) -> str:
+
+    history = CONVERSATIONS.get(
+        sender_id,
+        []
+    )
+
+    if not history:
+        return "Өмнөх яриа байхгүй."
+
+    return "\n".join(
+        f"{item['role']}: {item['text']}"
+        for item in history
+    )
+
+
 # =========================================================
-# MINERS VILLA DATA
+# GROQ CLIENT
 # =========================================================
 
-PRICE_MIN = 5_500_000
-PRICE_MAX = 5_800_000
-SALES_PHONE = "9430-7017"
+client = None
 
-SALES_OFFICE = "Эрдэнэт хот, 1/16-р байрны зүүн урд буланд, төв зам дагуу"
-LOCATION_TEXT = "Баян-Өндөр уулын зүүн энгэрт, Бүсийн оношилгооны төвийн ард, Медипас эмнэлгийн ард, 30.8 га талбайд байрладаг."
-PAYMENT_TEXT = "30% урьдчилгаа, 40% явцын төлбөр, 20% явцын төлбөр, 10% түлхүүр гардуулах үед. Явцын төлбөрт зөвхөн байрны бартер сонсоно."
-PARKING_TEXT = "Мульт хаусын Б1 болон 1-р давхарт нэгдсэн дулаан зогсоол байрлана. Зогсоолын үнэ 50,000,000 ₮."
-UNKNOWN_TEXT = "Уучлаарай, би энэ асуултыг сайн ойлгосонгүй. Та асуултаа арай дэлгэрэнгүй бичнэ үү, эсвэл манай борлуулалтын албатай 9430-7017 дугаараар холбогдон лавлах боломжтой 😊"
-
-
-# =========================================================
-# SYSTEM PROMPT
-# =========================================================
-
-SYSTEM_PROMPT = """
-ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН 23 НАСТАЙ, ЭЕЛДЭГ, ЗӨӨЛӨН, ТУСЧ БОРЛУУЛАГЧ.
-
-ЗОРИЛГО БОЛОН ҮҮРЭГ:
-1. Автомат түлхүүр үгэнд таараагүй үед зөвөөр ойлгож тайлбарлах.
-2. Худал мэдээлэл зохиохгүй, мэдэхгүй зүйл байвал 9430-7017 дугаар руу холбогдохыг эелдгээр зөвлөх.
-
-ҮНДСЭН МЭДЭЭЛЭЛ:
-* М² үнэ: 5,500,000 - 5,800,000 ₮
-* Борлуулалтын утас: 9430-7017
-* Төлбөр: 30% урьдчилгаа, 40%, 20% явцын төлбөр, 10% үлдэгдэл. Бартер зөвхөн байраар.
-* Загвар: Таун хаус (213.33-267.48 м²), Мульт хаус (125.21-198.52 м²). Сингл, Твин дууссан.
-* Ашиглалтад орох: 2026 оны өвөл дотоод засал эхэлнэ. Яг таг хугацаа зохиож болохгүй.
-"""
+if GROQ_API_KEY:
+    try:
+        client = Groq(
+            api_key=GROQ_API_KEY
+        )
+    except Exception as exc:
+        print(
+            "⚠️ Groq client үүсгэхэд алдаа:",
+            repr(exc)
+        )
+        client = None
 
 
 # =========================================================
-# HELPERS
+# TEXT NORMALIZATION
 # =========================================================
-
-client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 def normalize_text(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r"[^\w\s\.,]", " ", text)
-    
-    replacements = {"ё": "е", "өү": "оу", "ү": "у", "ө": "о", "v": "u", "w": "v"}
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-        
-    word_replacements = {
-        "mdll": "medeelel", "mdlel": "medeelel", "mdeelel": "medeelel", 
-        "brshil": "bairshil", "tlbur": "tulbur", "zgsol": "zogsool", 
-        "uts": "utas", "mkv": "m2", "мкв": "м2"
+
+    if not text:
+        return ""
+
+    text = str(text).lower().strip()
+
+    # punctuation-ийг space болгоно
+    text = re.sub(
+        r"[^\w\s.,]",
+        " ",
+        text,
+        flags=re.UNICODE
+    )
+
+    # Монгол үсгийн зарим түгээмэл бичлэгийн хувилбар
+    replacements = {
+        "ё": "е",
+        "ү": "у",
+        "ө": "о",
+        "v": "u",
+        "w": "v",
     }
+
+    for old, new in replacements.items():
+        text = text.replace(
+            old,
+            new
+        )
+
+    # Түгээмэл typo
+    word_replacements = {
+        "mdll": "medeelel",
+        "mdlel": "medeelel",
+        "mdeelel": "medeelel",
+        "brshil": "bairshil",
+        "tlbur": "tulbur",
+        "zgsol": "zogsool",
+        "uts": "utas",
+        "mkv": "m2",
+        "кв": "м2",
+    }
+
     words = text.split()
-    normalized_words = [word_replacements.get(w, w) for w in words]
-    return " ".join(normalized_words).strip()
 
-def match_any(keywords: List[str], normalized_text: str) -> bool:
-    return any(normalize_text(kw) in normalized_text for kw in keywords)
+    normalized_words = [
+        word_replacements.get(
+            word,
+            word
+        )
+        for word in words
+    ]
 
-def resolve_photo_file(stem: str) -> Optional[Path]:
+    return " ".join(
+        normalized_words
+    ).strip()
+
+
+def match_any(
+    keywords: List[str],
+    normalized_text: str
+) -> bool:
+
+    return any(
+        normalize_text(keyword) in normalized_text
+        for keyword in keywords
+    )
+
+
+# =========================================================
+# PHOTO HELPERS
+# =========================================================
+
+def resolve_photo_file(
+    stem: str
+) -> Optional[Path]:
+
     if not PHOTO_FOLDER.exists():
         return None
+
+    target_stem = stem.lower()
+
+    # exact stem
     for file in PHOTO_FOLDER.iterdir():
-        if file.is_file() and file.stem.lower() == stem.lower():
+
+        if not file.is_file():
+            continue
+
+        if file.stem.lower() == target_stem:
             return file
+
+    # exact filename fallback
+    for file in PHOTO_FOLDER.iterdir():
+
+        if not file.is_file():
+            continue
+
+        if file.name.lower() == target_stem:
+            return file
+
     return None
 
-def get_public_image_url(filename: str) -> str:
-    base_url = "https://miners-villa-bot.onrender.com/photo"
-    return f"{base_url}/{quote(filename, safe='')}"
 
-def add_to_history(sender_id: str, role: str, text: str):
-    history = CONVERSATIONS.setdefault(sender_id, [])
-    history.append({"role": role, "text": text})
-    if len(history) > MAX_HISTORY:
-        del history[:-MAX_HISTORY]
+def get_public_image_url(
+    filename: str
+) -> str:
 
-def history_text(sender_id: str) -> str:
-    history = CONVERSATIONS.get(sender_id, [])
-    if not history: return "Өмнөх яриа байхгүй."
-    return "\n".join(f"{item['role']}: {item['text']}" for item in history)
+    return (
+        f"{PUBLIC_BASE_URL}/photo/"
+        f"{quote(filename, safe='')}"
+    )
+
+
+# =========================================================
+# PHOTO ROUTE
+# =========================================================
+
+@app.get("/photo/{filename}")
+async def get_photo(
+    filename: str
+):
+
+    file_path = PHOTO_FOLDER / filename
+
+    if file_path.is_file():
+
+        media_type, _ = mimetypes.guess_type(
+            str(file_path)
+        )
+
+        return FileResponse(
+            file_path,
+            media_type=media_type or "image/png",
+            headers={
+                "Cache-Control":
+                    "public, max-age=31536000"
+            }
+        )
+
+    target = filename.lower()
+
+    # Case insensitive filename
+    for file in PHOTO_FOLDER.iterdir():
+
+        if (
+            file.is_file()
+            and file.name.lower() == target
+        ):
+
+            media_type, _ = mimetypes.guess_type(
+                str(file)
+            )
+
+            return FileResponse(
+                file,
+                media_type=media_type or "image/png",
+                headers={
+                    "Cache-Control":
+                        "public, max-age=31536000"
+                }
+            )
+
+    # Case insensitive stem
+    target_stem = Path(
+        filename
+    ).stem.lower()
+
+    for file in PHOTO_FOLDER.iterdir():
+
+        if (
+            file.is_file()
+            and file.stem.lower() == target_stem
+        ):
+
+            media_type, _ = mimetypes.guess_type(
+                str(file)
+            )
+
+            return FileResponse(
+                file,
+                media_type=media_type or "image/png",
+                headers={
+                    "Cache-Control":
+                        "public, max-age=31536000"
+                }
+            )
+
+    raise HTTPException(
+        status_code=404,
+        detail="Photo not found"
+    )
+
+
+# =========================================================
+# QUICK REPLIES
+# =========================================================
+
+DEFAULT_BUTTONS = [
+    {
+        "content_type": "text",
+        "title": "🏠 Загварууд",
+        "payload": "PAYLOAD_MODEL"
+    },
+    {
+        "content_type": "text",
+        "title": "💰 Үнэ",
+        "payload": "PAYLOAD_PRICE"
+    },
+    {
+        "content_type": "text",
+        "title": "📍 Байршил",
+        "payload": "PAYLOAD_LOCATION"
+    },
+    {
+        "content_type": "text",
+        "title": "☎️ Холбоо барих",
+        "payload": "PAYLOAD_CONTACT"
+    }
+]
+
+
+MODEL_BUTTONS = [
+    {
+        "content_type": "text",
+        "title": "🏡 Таун хаус",
+        "payload": "PAYLOAD_TOWN"
+    },
+    {
+        "content_type": "text",
+        "title": "🏢 Мульт хаус",
+        "payload": "PAYLOAD_MULT"
+    },
+    {
+        "content_type": "text",
+        "title": "💰 Үнэ",
+        "payload": "PAYLOAD_PRICE"
+    }
+]
 
 
 # =========================================================
 # DIRECT IMAGE ROUTER
 # =========================================================
 
-def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[str]]:
-    t = normalize_text(user_text)
+def direct_image_router(
+    user_text: str,
+    sender_id: str = ""
+) -> Optional[List[str]]:
+
+    t = normalize_text(
+        user_text
+    )
 
     mult_image_map = {
-        "126.32": "MULT_126_32", "126": "MULT_126",
-        "125.21": "MULT_125", "125": "MULT_125",
-        "120.85": "MULT_120", "120": "MULT_120",
-        "116": "MULT_116", "100.77": "MULT_100", "100": "MULT_100",
-        "136.42": "MULT_136", "136": "MULT_136",
-        "178.39": "MULT_178", "178": "MULT_178",
-        "189.64": "MULT_189_64", "189.52": "MULT_189", "189": "MULT_189",
-        "192.25": "MULT_192", "192": "MULT_192",
-        "198.52": "MULT_198", "198": "MULT_198",
+
+        "126.32": "MULT_126_32",
+        "125.21": "MULT_125",
+        "120.85": "MULT_120",
+
+        "116": "MULT_116",
+        "100.77": "MULT_100",
+
+        "136.42": "MULT_136",
+        "178.39": "MULT_178",
+
+        "189.64": "MULT_189_64",
+        "189.52": "MULT_189",
+
+        "192.25": "MULT_192",
+        "198.52": "MULT_198",
+
+        "126": "MULT_126",
+        "125": "MULT_125",
+        "120": "MULT_120",
+        "100": "MULT_100",
+        "136": "MULT_136",
+        "178": "MULT_178",
+        "189": "MULT_189",
+        "192": "MULT_192",
+        "198": "MULT_198",
+        "116": "MULT_116",
     }
-    
-    for size in sorted(mult_image_map.keys(), key=len, reverse=True):
-        pattern = r"\b" + size.replace(".", r"\.").replace(",", r"\,") + r"\b"
-        if re.search(pattern, t):
-            return ["MULT", mult_image_map[size]]
 
-    if re.search(r"\b(212|213)\b", t): return ["TOWNHOUSE_212", "TOWNHOUSE_212_1", "GENERAL_PLAN"]
-    if re.search(r"\b(266|267)\b", t): return ["TOWNHOUSE_266", "TOWNHOUSE_266_1", "GENERAL_PLAN"]
+    # Specific м² first
+    for size in sorted(
+        mult_image_map.keys(),
+        key=len,
+        reverse=True
+    ):
 
-    # 212 м² болон 266 м² тус бүрийн 2, 2 зургийг (Гадна төрх + Давхрын зохион байгуулалт) дарааллуулж оруулах
-    if match_any(["таун хаус", "таунхаус", "таун", "taun", "townhouse"], t): 
+        escaped = re.escape(size)
+
+        pattern = (
+            rf"(?<!\d){escaped}"
+            rf"(?!\d)"
+        )
+
+        if re.search(
+            pattern,
+            t
+        ):
+            return [
+                "MULT",
+                mult_image_map[size]
+            ]
+
+    # Townhouse sizes
+    if re.search(
+        r"(?<!\d)(212|213)(?!\d)",
+        t
+    ):
+
         return [
-            "TOWNHOUSE_212_1", "TOWNHOUSE_212",  # 212 м²-ийн 2 зураг (Гадна үзэмж + Загвар)
-            "TOWNHOUSE_266_1", "TOWNHOUSE_266"   # 266 м²-ийн 2 зураг (Гадна үзэмж + Загвар)
+            "TOWNHOUSE_212",
+            "TOWNHOUSE_212_1",
+            "GENERAL_PLAN"
         ]
-    
-    if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "мулт"], t): 
+
+    if re.search(
+        r"(?<!\d)(266|267)(?!\d)",
+        t
+    ):
+
         return [
-            "MULT", "MULT_100", "MULT_116", "MULT_120", "MULT_125", 
-            "MULT_126", "MULT_126_32", "MULT_136", "MULT_178", 
-            "MULT_189", "MULT_189_64", "MULT_192", "MULT_198"
+            "TOWNHOUSE_266",
+            "TOWNHOUSE_266_1",
+            "GENERAL_PLAN"
         ]
-    parking_kws = ["зогсоол", "гараж", "гараш", "гарааш", "zogsool", "garaash", "garaj"]
-    if match_any(parking_kws, t): return ["MULT_PARKING_SPACE", "MULT_PARKING_SPACE_1"]
+
+    # Townhouse
+    if match_any(
+        [
+            "таун хаус",
+            "таунхаус",
+            "таун",
+            "taun",
+            "townhouse"
+        ],
+        t
+    ):
+
+        return [
+            "TOWNHOUSE_212_1",
+            "TOWNHOUSE_212",
+            "TOWNHOUSE_266_1",
+            "TOWNHOUSE_266"
+        ]
+
+    # Multi-house
+    if match_any(
+        [
+            "мульт хаус",
+            "мультхаус",
+            "мульт",
+            "mult",
+            "мулт"
+        ],
+        t
+    ):
+
+        return [
+            "MULT",
+            "MULT_100",
+            "MULT_116",
+            "MULT_120",
+            "MULT_125",
+            "MULT_126",
+            "MULT_126_32",
+            "MULT_136",
+            "MULT_178",
+            "MULT_189",
+            "MULT_189_64",
+            "MULT_192",
+            "MULT_198"
+        ]
+
+    # Parking
+    if match_any(
+        [
+            "зогсоол",
+            "гараж",
+            "гараш",
+            "гарааш",
+            "zogsool",
+            "garaash",
+            "garaj"
+        ],
+        t
+    ):
+
+        return [
+            "MULT_PARKING_SPACE",
+            "MULT_PARKING_SPACE_1"
+        ]
 
     return None
 
@@ -243,160 +680,589 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
 # DIRECT FAQ ROUTER
 # =========================================================
 
-def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str, Any, Optional[List[Dict]]]]:
-    t = normalize_text(user_text)
+def direct_faq_router(
+    user_text: str,
+    sender_id: str = ""
+) -> Optional[
+    Tuple[str, Any, Optional[List[Dict]]]
+]:
 
-    default_buttons = [
-        {"content_type": "text", "title": "🏡 Таун хаус", "payload": "PAYLOAD_TOWN"},
-        {"content_type": "text", "title": "🏢 Мульт хаус", "payload": "PAYLOAD_MULT"},
-        {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"}
+    t = normalize_text(
+        user_text
+    )
+
+    # -----------------------------------------------------
+    # 1. Greeting
+    # -----------------------------------------------------
+
+    greetings = [
+        "сайн уу",
+        "сайн байна уу",
+        "hello",
+        "hi",
+        "мэнд",
+        "get started",
+        "start",
+        "snu",
+        "сну",
+        "сээноо",
+        "эхлэх"
     ]
 
-    # 1. Мэндчилгээ болон Эхлэл
-    greetings = ["сайн уу", "сайн байна уу", "hello", "hi", "мэнд", "get started", "start", "snu", "сну", "сээноо", "эхлэх"]
-    if match_any(greetings, t) and len(t.split()) <= 4:
+    if (
+        match_any(greetings, t)
+        and len(t.split()) <= 5
+    ):
+
         reply = (
-            "Сайн байна уу? Тав тух, үнэ цэнийн илэрхийлэл болсон 'Miners Villa' төслийн "
-            "албан ёсны чатботод тавтай морил! \n\n"
-            "Урьд нь 'Уурхайчин-3' нэртэй байсан манай төсөл илүү өргөжиж, хүн бүхэнд нээлттэй "
-            "амины орон сууцны цогцолбор хотхон болсныг дуулгахад таатай байна. Би танд ямар мэдээлэл өгч туслах вэ? 👇"
+            "Сайн байна уу? 😊\n\n"
+            "Тав тух, үнэ цэнийн илэрхийлэл болсон "
+            "'Miners Villa' төслийн албан ёсны "
+            "чатботод тавтай морил!\n\n"
+            "Урьд нь 'Уурхайчин-3' нэртэй байсан "
+            "манай төсөл илүү өргөжиж, хүн бүхэнд "
+            "нээлттэй амины орон сууцны цогцолбор "
+            "хотхон болсон.\n\n"
+            "Танд ямар мэдээлэл хэрэгтэй вэ? 👇"
         )
-        return (reply, True, None)
 
-    # 2. Загварын сонголт / Том карт хэлбэрээр харуулах
-    model_keywords = ["сонголт", "загвар", "хэмжээ", "мкв", "м2", "квадрат", "songolt", "zagvar", "mkv"]
-    if match_any(model_keywords, t):
-        reply = "Манай төслийн загварын сонголтууд (Таун болон Мульт хаус)-ыг доорх картуудаас үзнэ үү 👇"
-        return (reply, "MODEL", None)
+        return (
+            reply,
+            True,
+            None
+        )
 
-    # 3. Үнэ
-    price_keywords = ["үнэ", "үнийн", "үнэтэй", "м2 үнэ", "une", "vne", "xed", "hed"]
-    if match_any(price_keywords, t):
+    # -----------------------------------------------------
+    # 2. Model selection
+    # -----------------------------------------------------
+
+    model_keywords = [
+        "сонголт",
+        "загвар",
+        "хэмжээ",
+        "мкв",
+        "м2",
+        "квадрат",
+        "songolt",
+        "zagvar",
+        "mkv"
+    ]
+
+    if match_any(
+        model_keywords,
+        t
+    ):
+
         reply = (
-            "Одоогийн м² үнэ 5,500,000–5,800,000 ₮ байна. "
-            "Дэлгэрэнгүй үнийн саналыг борлуулалтын албаны "
+            "Манай төслийн загварын сонголтууд "
+            "(Таун болон Мульт хаус)-ыг доорх "
+            "картуудаас үзнэ үү 👇"
+        )
+
+        return (
+            reply,
+            "MODEL",
+            None
+        )
+
+    # -----------------------------------------------------
+    # 3. Price
+    # -----------------------------------------------------
+
+    price_keywords = [
+        "үнэ",
+        "үнийн",
+        "үнэтэй",
+        "м2 үнэ",
+        "une",
+        "vne",
+        "xed",
+        "hed"
+    ]
+
+    if match_any(
+        price_keywords,
+        t
+    ):
+
+        reply = (
+            f"Одоогийн м² үнэ "
+            f"{PRICE_MIN:,}–{PRICE_MAX:,} ₮ байна.\n\n"
+            "Тодорхой байр, талбайн үнийн "
+            "саналыг борлуулалтын албанаас "
+            f"{SALES_PHONE} дугаараар "
+            "лавлаарай 😊"
+        )
+
+        return (
+            reply,
+            False,
+            MODEL_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 4. Location
+    # -----------------------------------------------------
+
+    location_keywords = [
+        "байршил",
+        "хаана байдаг",
+        "хаана вэ",
+        "bairshil",
+        "haana"
+    ]
+
+    if match_any(
+        location_keywords,
+        t
+    ):
+
+        reply = (
+            f"📍 Miners Villa нь "
+            f"{LOCATION_TEXT}\n\n"
+            f"☎️ Дэлгэрэнгүй: {SALES_PHONE}"
+        )
+
+        return (
+            reply,
+            False,
+            DEFAULT_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 5. Phone
+    # -----------------------------------------------------
+
+    phone_keywords = [
+        "утас",
+        "дугаар",
+        "холбоо барих",
+        "залгах",
+        "utas",
+        "dugaar"
+    ]
+
+    if (
+        match_any(phone_keywords, t)
+        and not match_any(["оффис"], t)
+    ):
+
+        return (
+            f"☎️ Манай борлуулалтын утас: "
+            f"{SALES_PHONE} 😊",
+            False,
+            DEFAULT_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 6. General information
+    # -----------------------------------------------------
+
+    info_keywords = [
+        "мэдээлэл",
+        "дэлгэрэнгүй",
+        "танилцуулга",
+        "medeelel",
+        "taniltsuulga"
+    ]
+
+    if (
+        match_any(info_keywords, t)
+        and len(t.split()) <= 5
+    ):
+
+        reply = (
+            "🏡 Miners Villa төсөл:\n\n"
+            "📍 Байршил: Баян-Өндөр уулын "
+            "зүүн энгэрт.\n"
+            "🏗 Дэд бүтэц: Төвийн дулаан, "
+            "цахилгаан, цэвэр, бохирт холбогдсон.\n"
+            "🌳 Эко орчин: 30.8 га талбай.\n"
+            "🏠 Сонголт: Таун болон Мульт хаус.\n"
+            f"💰 М² үнэ: {PRICE_MIN:,}–"
+            f"{PRICE_MAX:,} ₮.\n\n"
+            f"☎️ Дэлгэрэнгүй: {SALES_PHONE}"
+        )
+
+        return (
+            reply,
+            False,
+            DEFAULT_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 7. Features
+    # -----------------------------------------------------
+
+    features_keywords = [
+        "онцлог",
+        "давуу тал",
+        "ялгаа",
+        "ontslog",
+        "davuu tal"
+    ]
+
+    if match_any(
+        features_keywords,
+        t
+    ):
+
+        reply = (
+            "🌳 Төслийн онцлог, давуу талууд:\n\n"
+            "✅ Найдвартай дэд бүтэц\n"
+            "✅ Төвийн бүрэн холболт\n"
+            "✅ 24 цагийн харуул хамгаалалт\n"
+            "✅ 2.2 км хүрээлсэн хашаа\n"
+            "✅ Автомашингүй ногоон бүс\n"
+            "✅ Байгалийн гэрэлтүүлэг сайтай\n"
+            "✅ Насны онцлогт тохирсон "
+            "4 төрлийн тоглоомын талбай\n"
+            "✅ Ойролцоогоор 400 автомашины "
+            "нэгдсэн дулаан зогсоол"
+        )
+
+        return (
+            reply,
+            False,
+            DEFAULT_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 8. Payment
+    # -----------------------------------------------------
+
+    payment_keywords = [
+        "төлбөр",
+        "төлбөрийн нөхцөл",
+        "урьдчилгаа",
+        "tulbur",
+        "urdchilgaa"
+    ]
+
+    if match_any(
+        payment_keywords,
+        t
+    ):
+
+        return (
+            f"💰 {PAYMENT_TEXT}",
+            False,
+            DEFAULT_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 9. Parking
+    # -----------------------------------------------------
+
+    parking_keywords = [
+        "зогсоол",
+        "гарааш",
+        "гараж",
+        "б1",
+        "zogsool",
+        "garaash"
+    ]
+
+    if match_any(
+        parking_keywords,
+        t
+    ):
+
+        return (
+            f"🚗 {PARKING_TEXT}",
+            False,
+            DEFAULT_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 10. Completion
+    # -----------------------------------------------------
+
+    completion_keywords = [
+        "ашиглалт",
+        "хэзээ орох",
+        "хэзээ ашиглалтад",
+        "ashiglalt",
+        "hezee oroh"
+    ]
+
+    if match_any(
+        completion_keywords,
+        t
+    ):
+
+        reply = (
+            "2026 оны өвөл гэхэд дотоод заслын "
+            "ажлыг эхлүүлэхээр ажиллаж байна.\n\n"
+            "Яг таг ашиглалтад орох огноог "
+            "зохиож хэлэхгүй. Шинэ мэдээллийг "
             f"{SALES_PHONE} дугаараас лавлаарай 😊"
         )
-        return (reply, False, default_buttons)
 
-    # 4. Байршил
-    location_keywords = ["байршил", "хаана байдаг", "хаана вэ", "bairshil", "haana"]
-    if match_any(location_keywords, t):
-        return (f"Miners Villa нь {LOCATION_TEXT} Дэлгэрэнгүйг: {SALES_PHONE} 😊", False, default_buttons)
-
-    # 5. Утас
-    phone_keywords = ["утас", "дугаар", "холбоо барих", "залгах", "utas", "dugaar"]
-    if match_any(phone_keywords, t) and not match_any(["оффис"], t):
-        return (f"Манай борлуулалтын утас: {SALES_PHONE} 😊", False, default_buttons)
-
-    # 6. Мэдээлэл
-    info_keywords = ["мэдээлэл", "дэлгэрэнгүй", "танилцуулга", "medeelel", "taniltsuulga"]
-    if match_any(info_keywords, t) and len(t.split()) <= 4:
-        reply = (
-            "\"Miners Villa\" төсөл:\n"
-            "✨ Байршил: Баян-Өндөр хайрхны зүүн энгэрт.\n"
-            "✨ Дэд бүтэц: Төвийн дулаан, цахилгаан, цэвэр, бохирт холбогдсон.\n"
-            "✨ Эко орчин: 30.8 га талбайн 60% нь ногоон байгууламж.\n"
-            "✨ Сонголт: Таун (Town) болон Мульт (Multi) хаусууд.\n\n"
-            f"Дэлгэрэнгүй мэдээлэл авахыг хүсвэл {SALES_PHONE} дугаартай холбогдоорой! ✨"
+        return (
+            reply,
+            False,
+            DEFAULT_BUTTONS
         )
-        return (reply, False, default_buttons)
-        
-    # 7. Онцлог
-    features_keywords = ["онцлог", "давуу тал", "ялгаа", "ontslog", "davuu tal"]
-    if match_any(features_keywords, t):
-        reply = (
-            "Төслийн онцлог, давуу талууд:\n"
-            "✅ Найдвартай дэд бүтэц (Төвийн бүрэн холболт)\n"
-            "✅ 24 цагийн харуул хамгаалалт, 2.2км хүрээлсэн хашаа\n"
-            "✅ Автомашингүй ногоон бүс, байгалийн гэрэлтүүлэг сайтай\n"
-            "✅ Насны онцлогт тохирсон 4 төрлийн тоглоомын талбай\n"
-            "✅ 400 орчим автомашины нэгдсэн дулаан зогсоол"
-        )
-        return (reply, False, default_buttons)
 
-    # 8. Төлбөрийн нөхцөл
-    payment_keywords = ["төлбөр", "төлбөрийн нөхцөл", "урьдчилгаа", "tulbur", "urdchilgaa"]
-    if match_any(payment_keywords, t):
-        return (PAYMENT_TEXT, False, default_buttons)
-        
-    # 9. Зогсоол
-    parking_keywords = ["зогсоол", "гарааш", "б1", "zogsool", "garaash"]
-    if match_any(parking_keywords, t):
-        return (PARKING_TEXT, False, default_buttons)
-        
-    # 10. Ашиглалтад орох
-    completion_keywords = ["ашиглалт", "хэзээ орох", "ashiglalt", "hezee oroh"]
-    if match_any(completion_keywords, t):
-        return ("2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна. Дэлгэрэнгүйг 9430-7017 дугаараас лавлана уу 😊", False, default_buttons)
+    # -----------------------------------------------------
+    # 11. Visit / Office
+    # -----------------------------------------------------
 
-# 11. Очиж үзэх / Оффис / Уулзах
-    visit_keywords = ["очиж", "узэх", "харж болох", "харах", "уулзах", "оффис", "очиж харах"]
-    if match_any(visit_keywords, t):
+    visit_keywords = [
+        "очиж",
+        "үзэх",
+        "узэх",
+        "харж болох",
+        "харах",
+        "уулзах",
+        "оффис",
+        "очиж харах"
+    ]
+
+    if match_any(
+        visit_keywords,
+        t
+    ):
+
         reply = (
-            f"Мэдээж бололгүй яахав! 😊 Та манай борлуулалтын оффист хүрэлцэн ирж "
-            f"төслийн дэлгэрэнгүй мэдээлэл болон загвартай танилцах боломжтой.\n\n"
+            "Мэдээж 😊 Та манай борлуулалтын "
+            "оффист хүрэлцэн ирж төслийн "
+            "дэлгэрэнгүй мэдээлэл болон "
+            "загвартай танилцах боломжтой.\n\n"
             f"📍 Хаяг: {SALES_OFFICE}\n"
-            f"☎️ Борлуулалтын утас: {SALES_PHONE}"
+            f"☎️ Утас: {SALES_PHONE}"
         )
-        return (reply, False, default_buttons)
+
+        return (
+            reply,
+            False,
+            DEFAULT_BUTTONS
+        )
+
+    # -----------------------------------------------------
+    # 12. Return nothing
+    # -----------------------------------------------------
 
     return None
 
 
-
 # =========================================================
-# FACEBOOK MESSENGER (API)
+# FACEBOOK API
 # =========================================================
 
-def messenger_url():
-    return f"https://graph.facebook.com/v20.0/me/messages?access_token={META_PAGE_ACCESS_TOKEN}"
+def messenger_url() -> str:
 
-def send_fb_message(recipient_id: str, text: str, quick_replies: Optional[List[Dict]] = None):
-    if not META_PAGE_ACCESS_TOKEN: return
-    
-    message_data = {"text": text}
+    if not META_PAGE_ACCESS_TOKEN:
+        return ""
+
+    return (
+        "https://graph.facebook.com/v20.0/"
+        "me/messages"
+        f"?access_token={META_PAGE_ACCESS_TOKEN}"
+    )
+
+
+def send_fb_message(
+    recipient_id: str,
+    text: str,
+    quick_replies: Optional[List[Dict]] = None
+) -> bool:
+
+    if not META_PAGE_ACCESS_TOKEN:
+        print(
+            "⚠️ META_PAGE_ACCESS_TOKEN байхгүй."
+        )
+        return False
+
+    if not recipient_id:
+        return False
+
+    if not text:
+        text = UNKNOWN_TEXT
+
+    message_data = {
+        "text": str(text)
+    }
+
     if quick_replies:
-        message_data["quick_replies"] = quick_replies
-        
-    payload = {"recipient": {"id": recipient_id}, "message": message_data}
-    try:
-        requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-    except Exception as e:
-        print("Error sending text:", repr(e))
+        message_data[
+            "quick_replies"
+        ] = quick_replies
 
-def send_carousel_menu(recipient_id: str, quick_replies: Optional[List[Dict]] = None):
-    if not META_PAGE_ACCESS_TOKEN: return
-    
-    card1_url = "https://miners-villa-bot.onrender.com/photo/general.png?v=3"
-    card2_url = "https://miners-villa-bot.onrender.com/photo/general_plan.png" 
-    
     payload = {
-        "recipient": {"id": recipient_id},
+        "recipient": {
+            "id": recipient_id
+        },
+        "message": message_data
+    }
+
+    try:
+
+        response = requests.post(
+            messenger_url(),
+            json=payload,
+            headers={
+                "Content-Type":
+                    "application/json"
+            },
+            timeout=15
+        )
+
+        if not response.ok:
+
+            print(
+                "❌ Facebook text API error:",
+                response.status_code,
+                response.text
+            )
+
+            return False
+
+        print(
+            "✅ Facebook text sent:",
+            response.status_code
+        )
+
+        return True
+
+    except Exception as exc:
+
+        print(
+            "❌ Error sending text:",
+            repr(exc)
+        )
+
+        return False
+
+
+# =========================================================
+# GENERAL CAROUSEL
+# =========================================================
+
+def send_carousel_menu(
+    recipient_id: str,
+    quick_replies: Optional[List[Dict]] = None
+) -> bool:
+
+    if not META_PAGE_ACCESS_TOKEN:
+        return False
+
+    card1_url = (
+        f"{PUBLIC_BASE_URL}/photo/"
+        "general.png?v=3"
+    )
+
+    card2_url = (
+        f"{PUBLIC_BASE_URL}/photo/"
+        "general_plan.png"
+    )
+
+    payload = {
+        "recipient": {
+            "id": recipient_id
+        },
         "message": {
             "attachment": {
                 "type": "template",
                 "payload": {
                     "template_type": "generic",
                     "elements": [
+
                         {
-                            "title": "MINERS VILLA ТӨСӨЛ",
-                            "subtitle": "Тав тух, үнэ цэнийн илэрхийлэл болсон хотхон",
-                            "image_url": card1_url,
+                            "title":
+                                "MINERS VILLA ТӨСӨЛ",
+
+                            "subtitle":
+                                "Тав тух, үнэ цэнийн "
+                                "илэрхийлэл болсон хотхон",
+
+                            "image_url":
+                                card1_url,
+
                             "buttons": [
-                                {"type": "postback", "title": "💰 Үнийн мэдээлэл", "payload": "PAYLOAD_PRICE"},
-                                {"type": "postback", "title": "ℹ️ Ерөнхий танилцуулга", "payload": "PAYLOAD_INFO"},
-                                {"type": "postback", "title": "🏠 Загварын сонголт", "payload": "PAYLOAD_MODEL"}
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "💰 Үнийн мэдээлэл",
+
+                                    "payload":
+                                        "PAYLOAD_PRICE"
+                                },
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "ℹ️ Ерөнхий танилцуулга",
+
+                                    "payload":
+                                        "PAYLOAD_INFO"
+                                },
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "🏠 Загварын сонголт",
+
+                                    "payload":
+                                        "PAYLOAD_MODEL"
+                                }
                             ]
                         },
+
                         {
-                            "title": "MINERS VILLA ТӨСӨЛ",
-                            "subtitle": "Хүн бүхэнд нээлттэй амины орон сууцны цогцолбор",
-                            "image_url": card2_url,
+                            "title":
+                                "MINERS VILLA ТӨСӨЛ",
+
+                            "subtitle":
+                                "Хүн бүхэнд нээлттэй "
+                                "амины орон сууцны "
+                                "цогцолбор",
+
+                            "image_url":
+                                card2_url,
+
                             "buttons": [
-                                {"type": "postback", "title": "📍 Төслийн байршил", "payload": "PAYLOAD_LOCATION"},
-                                {"type": "postback", "title": "🌳 Төслийн онцлог", "payload": "PAYLOAD_FEATURES"},
-                                {"type": "postback", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "📍 Төслийн байршил",
+
+                                    "payload":
+                                        "PAYLOAD_LOCATION"
+                                },
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "🌳 Төслийн онцлог",
+
+                                    "payload":
+                                        "PAYLOAD_FEATURES"
+                                },
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "☎️ Холбоо барих",
+
+                                    "payload":
+                                        "PAYLOAD_CONTACT"
+                                }
                             ]
                         }
                     ]
@@ -404,45 +1270,166 @@ def send_carousel_menu(recipient_id: str, quick_replies: Optional[List[Dict]] = 
             }
         }
     }
-    
+
     if quick_replies:
-        payload["message"]["quick_replies"] = quick_replies
+        payload[
+            "message"
+        ][
+            "quick_replies"
+        ] = quick_replies
 
     try:
-        requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-    except Exception as e:
-        print("Error sending Carousel:", repr(e))
 
-def send_model_carousel(recipient_id: str, quick_replies: Optional[List[Dict]] = None):
-    if not META_PAGE_ACCESS_TOKEN: return
+        response = requests.post(
+            messenger_url(),
+            json=payload,
+            headers={
+                "Content-Type":
+                    "application/json"
+            },
+            timeout=15
+        )
 
-    town_url = "https://miners-villa-bot.onrender.com/photo/townhouse_266.png?v=1"
-    mult_url = "https://miners-villa-bot.onrender.com/photo/mult.png?v=1"
+        if not response.ok:
+
+            print(
+                "❌ Carousel API error:",
+                response.status_code,
+                response.text
+            )
+
+            return False
+
+        print(
+            "✅ Carousel sent:",
+            response.status_code
+        )
+
+        return True
+
+    except Exception as exc:
+
+        print(
+            "❌ Error sending Carousel:",
+            repr(exc)
+        )
+
+        return False
+
+
+# =========================================================
+# MODEL CAROUSEL
+# =========================================================
+
+def send_model_carousel(
+    recipient_id: str,
+    quick_replies: Optional[List[Dict]] = None
+) -> bool:
+
+    if not META_PAGE_ACCESS_TOKEN:
+        return False
+
+    town_url = (
+        f"{PUBLIC_BASE_URL}/photo/"
+        "townhouse_266.png?v=1"
+    )
+
+    mult_url = (
+        f"{PUBLIC_BASE_URL}/photo/"
+        "mult.png?v=1"
+    )
 
     payload = {
-        "recipient": {"id": recipient_id},
+        "recipient": {
+            "id": recipient_id
+        },
+
         "message": {
             "attachment": {
+
                 "type": "template",
+
                 "payload": {
+
                     "template_type": "generic",
+
                     "elements": [
+
                         {
-                            "title": "🏡 ТАУН ХАУС (Townhouse)",
-                            "subtitle": "Сонголт: 213.33 м², 267.48 м²\nҮнэ: м² нь 5.5М - 5.8М ₮",
-                            "image_url": town_url,
+                            "title":
+                                "🏡 ТАУН ХАУС (Townhouse)",
+
+                            "subtitle":
+                                "Сонголт: 213.33 м², "
+                                "267.48 м²\n"
+                                "Үнэ: м² нь 5.5М - "
+                                "5.8М ₮",
+
+                            "image_url":
+                                town_url,
+
                             "buttons": [
-                                {"type": "postback", "title": "🏡 Таун хаус үзэх", "payload": "PAYLOAD_TOWN"},
-                                {"type": "postback", "title": "💰 Үнэ харах", "payload": "PAYLOAD_PRICE"}
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "🏡 Таун хаус үзэх",
+
+                                    "payload":
+                                        "PAYLOAD_TOWN"
+                                },
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "💰 Үнэ харах",
+
+                                    "payload":
+                                        "PAYLOAD_PRICE"
+                                }
                             ]
                         },
+
                         {
-                            "title": "🏢 МУЛЬТ ХАУС (Multi-family)",
-                            "subtitle": "Сонголт: 125 м² - 198 м² хүртэл\nҮнэ: м² нь 5.5М - 5.8М ₮",
-                            "image_url": mult_url,
+                            "title":
+                                "🏢 МУЛЬТ ХАУС (Multi-family)",
+
+                            "subtitle":
+                                "Сонголт: 125 м² - "
+                                "198 м² хүртэл\n"
+                                "Үнэ: м² нь 5.5М - "
+                                "5.8М ₮",
+
+                            "image_url":
+                                mult_url,
+
                             "buttons": [
-                                {"type": "postback", "title": "🏢 Мульт хаус үзэх", "payload": "PAYLOAD_MULT"},
-                                {"type": "postback", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "🏢 Мульт хаус үзэх",
+
+                                    "payload":
+                                        "PAYLOAD_MULT"
+                                },
+
+                                {
+                                    "type":
+                                        "postback",
+
+                                    "title":
+                                        "☎️ Холбоо барих",
+
+                                    "payload":
+                                        "PAYLOAD_CONTACT"
+                                }
                             ]
                         }
                     ]
@@ -452,225 +1439,950 @@ def send_model_carousel(recipient_id: str, quick_replies: Optional[List[Dict]] =
     }
 
     if quick_replies:
-        payload["message"]["quick_replies"] = quick_replies
+        payload[
+            "message"
+        ][
+            "quick_replies"
+        ] = quick_replies
 
     try:
-        requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-    except Exception as e:
-        print("Error sending Model Carousel:", repr(e))
 
-def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies: Optional[List[Dict]] = None):
-    if not image_keys or not META_PAGE_ACCESS_TOKEN:
-        print("❌ Алдаа: image_keys эсвэл META_PAGE_ACCESS_TOKEN байхгүй байна")
-        return
+        response = requests.post(
+            messenger_url(),
+            json=payload,
+            headers={
+                "Content-Type":
+                    "application/json"
+            },
+            timeout=15
+        )
+
+        if not response.ok:
+
+            print(
+                "❌ Model carousel error:",
+                response.status_code,
+                response.text
+            )
+
+            return False
+
+        print(
+            "✅ Model carousel sent:",
+            response.status_code
+        )
+
+        return True
+
+    except Exception as exc:
+
+        print(
+            "❌ Error sending model carousel:",
+            repr(exc)
+        )
+
+        return False
+
+
+# =========================================================
+# SEND IMAGES
+# =========================================================
+
+def send_images_by_keys(
+    recipient_id: str,
+    image_keys: List[str],
+    quick_replies: Optional[List[Dict]] = None
+) -> bool:
+
+    if not image_keys:
+        return False
+
+    if not META_PAGE_ACCESS_TOKEN:
+        print(
+            "⚠️ META_PAGE_ACCESS_TOKEN байхгүй."
+        )
+        return False
 
     elements = []
     seen = set()
-    for key in image_keys:
-        if key in seen or key not in IMAGE_LIBRARY:
-            continue
-        seen.add(key)
-        stem = IMAGE_LIBRARY[key]
-        local_path = resolve_photo_file(stem)
 
-        if local_path and local_path.is_file():
-            public_url = get_public_image_url(local_path.name)
-            print(f"📸 Зураг олдлоо: {key} -> {public_url}")
-            elements.append({
-                "title": f"Miners Villa - {key.replace('_', ' ')}",
-                "image_url": public_url,
-                "buttons": [{"type": "web_url", "url": public_url, "title": "🔍 Томруулж харах"}]
-            })
-        else:
-            print(f"⚠️ Энэ түлхүүрт тохирох файл олдсонгүй: {key} (stem: {stem})")
+    for key in image_keys:
+
+        if key in seen:
+            continue
+
+        if key not in IMAGE_LIBRARY:
+            print(
+                f"⚠️ Unknown image key: {key}"
+            )
+            continue
+
+        seen.add(key)
+
+        stem = IMAGE_LIBRARY[key]
+
+        local_path = resolve_photo_file(
+            stem
+        )
+
+        if not local_path:
+            print(
+                "⚠️ Зураг олдсонгүй:",
+                key,
+                stem
+            )
+            continue
+
+        public_url = get_public_image_url(
+            local_path.name
+        )
+
+        print(
+            f"📸 Зураг олдлоо: "
+            f"{key} -> {public_url}"
+        )
+
+        elements.append({
+
+            "title":
+                "Miners Villa - "
+                + key.replace("_", " "),
+
+            "image_url":
+                public_url,
+
+            "buttons": [
+
+                {
+                    "type":
+                        "web_url",
+
+                    "url":
+                        public_url,
+
+                    "title":
+                        "🔍 Томруулж харах"
+                }
+            ]
+        })
 
     if not elements:
-        print("❌ Илгээх боломжтой зураг олдсонгүй!")
-        send_fb_message(
-            recipient_id, 
-            "⚠️ Уучлаарай, одоогоор энэ загварын зургууд системд оруулаагүй байна.", 
-            quick_replies=quick_replies
+
+        print(
+            "❌ Илгээх боломжтой зураг олдсонгүй."
         )
-        return
 
-    # Зургуудыг 5, 5-аар нь багцлан хуваах
-    chunks = [elements[i:i + 5] for i in range(0, len(elements), 5)]
+        send_fb_message(
+            recipient_id,
+            "⚠️ Уучлаарай, одоогоор "
+            "энэ загварын зургууд "
+            "системд оруулаагүй байна.",
+            quick_replies
+        )
 
-    for i, chunk in enumerate(chunks):
+        return False
+
+    # Messenger generic template нэг message-д
+    # хамгийн ихдээ 10 элемент явуулахад найдвартай.
+    chunks = [
+        elements[i:i + 10]
+        for i in range(
+            0,
+            len(elements),
+            10
+        )
+    ]
+
+    success = True
+
+    for index, chunk in enumerate(chunks):
+
         payload = {
-            "recipient": {"id": recipient_id},
+
+            "recipient": {
+                "id": recipient_id
+            },
+
             "message": {
+
                 "attachment": {
-                    "type": "template",
-                    "payload": {"template_type": "generic", "elements": chunk}
+
+                    "type":
+                        "template",
+
+                    "payload": {
+
+                        "template_type":
+                            "generic",
+
+                        "elements":
+                            chunk
+                    }
                 }
             }
         }
 
-        # Сүүлийн багц руу хурдан хариулах бутонуудыг (quick replies) нэмэх
-        if quick_replies and i == len(chunks) - 1:
-            payload["message"]["quick_replies"] = quick_replies
+        if (
+            quick_replies
+            and index == len(chunks) - 1
+        ):
+
+            payload[
+                "message"
+            ][
+                "quick_replies"
+            ] = quick_replies
 
         try:
-            res = requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-            print(f"📡 Facebook API Статус [Пакет {i+1}]: {res.status_code} - {res.text}")
-        except Exception as e:
-            print(f"❌ Багц илгээхэд алдаа гарлаа {i+1}:", repr(e))
-        
-        time.sleep(0.5)
+
+            response = requests.post(
+                messenger_url(),
+                json=payload,
+                headers={
+                    "Content-Type":
+                        "application/json"
+                },
+                timeout=15
+            )
+
+            print(
+                f"📡 Facebook image API "
+                f"[{index + 1}/{len(chunks)}]: "
+                f"{response.status_code}"
+            )
+
+            if not response.ok:
+
+                success = False
+
+                print(
+                    "❌ Image API error:",
+                    response.text
+                )
+
+        except Exception as exc:
+
+            success = False
+
+            print(
+                "❌ Зураг илгээхэд алдаа:",
+                repr(exc)
+            )
+
+        time.sleep(0.4)
+
+    return success
+
 
 # =========================================================
-# GROQ AI (META LLAMA 3)
+# GROQ SYSTEM PROMPT
 # =========================================================
 
-def ask_groq(sender_id: str, user_text: str):
-    if not client: return UNKNOWN_TEXT, []
-    
-    sys_prompt = f"""
-{SYSTEM_PROMPT}
+SYSTEM_PROMPT = f"""
+ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН
+эелдэг, зөөлөн, тусч борлуулалтын чатбот.
 
-ЧУХАЛ ЗААВАР:
-Та заавал дараах JSON форматаар хариулна уу:
-{{ "reply": "Минагийн өгөх эелдэг, зөөлөн хариулт", "image_keys": [] }}
+ТАНЫ ҮНДСЭН ҮҮРЭГ:
+
+1. Хэрэглэгчийн асуултыг ойлгож хариулах.
+2. Miners Villa-ийн баталгаатай мэдээллийг ашиглах.
+3. Худал мэдээлэл зохиохгүй.
+4. Мэдэхгүй мэдээллийг баталгаатай мэт хэлэхгүй.
+5. Тодорхой мэдээлэл байхгүй бол борлуулалтын
+   {SALES_PHONE} дугаарыг санал болгох.
+6. Хэрэглэгч бухимдсан бол маргалдахгүй.
+7. Гомдол, санал байвал эелдгээр хүлээн авч,
+   асуудлыг ойлгосноо харуулах.
+8. Хэрэглэгчийн асуултад аль болох товч,
+   ойлгомжтой Монгол хэлээр хариулах.
+9. Хэт урт тайлбар хэрэггүй.
+10. Үнэ, төлбөр, талбай, байршил зэрэг тоон
+    мэдээллийг дур мэдэн өөрчлөхгүй.
+
+ТӨСЛИЙН БАТАЛГААТ МЭДЭЭЛЭЛ:
+
+{PROJECT_KNOWLEDGE}
+
+ЧУХАЛ:
+
+- Яг таг ашиглалтад орох огноо зохиож болохгүй.
+- Тодорхойгүй зүйлийг "мэдэхгүй" гэж хэлж болно.
+- Худалдан авалтын шийдвэрт дарамт үзүүлэхгүй.
+- "Өнөөдөр л", "сүүлчийн байр", "яараарай" гэх мэт
+  баталгаагүй борлуулалтын шахалт бүү ашигла.
+- Хэрэглэгч зураг хүсвэл image_keys ашиглаж болно.
+- Зөвхөн IMAGE_LIBRARY-д байгаа key ашиглана.
+
+ТА ЗААВАЛ ДАРААХ JSON ФОРМАТААР ХАРИУЛ:
+
+{{
+    "reply": "Минагийн хариулт",
+    "image_keys": []
+}}
+
+image_keys нь дараах боломжит утгуудын аль нэг байна:
+
+{", ".join(sorted(IMAGE_KEYS))}
 """
+
+
+# =========================================================
+# GROQ AI
+# =========================================================
+
+def ask_groq(
+    sender_id: str,
+    user_text: str
+) -> Tuple[str, List[str]]:
+
+    if not client:
+
+        print(
+            "⚠️ Groq client байхгүй."
+        )
+
+        return (
+            UNKNOWN_TEXT,
+            []
+        )
 
     user_prompt = f"""
 ӨМНӨХ ЯРИА:
+
 {history_text(sender_id)}
 
-ХЭРЭГЛЭГЧИЙН ШИНЭ АСУУЛТ:
+ХЭРЭГЛЭГЧИЙН ШИНЭ МЕССЕЖ:
+
 {user_text}
+
+Дээрх мэдээлэлд тулгуурлан хариул.
 """
+
     try:
+
         response = client.chat.completions.create(
+
             model=GROQ_MODEL,
+
             messages=[
-                {"role": "system", "content": sys_prompt},
-                {"role": "user", "content": user_prompt}
+                {
+                    "role":
+                        "system",
+
+                    "content":
+                        SYSTEM_PROMPT
+                },
+
+                {
+                    "role":
+                        "user",
+
+                    "content":
+                        user_prompt
+                }
             ],
-            response_format={"type": "json_object"},
-            temperature=0.3, max_tokens=500,
+
+            response_format={
+                "type":
+                    "json_object"
+            },
+
+            temperature=0.2,
+
+            max_tokens=500
         )
-        data = json.loads(response.choices[0].message.content.strip())
-        reply = str(data.get("reply", UNKNOWN_TEXT)).strip()
-        keys = [k for k in data.get("image_keys", []) if k in IMAGE_LIBRARY]
-        return reply, keys[:13]
-    except Exception as e:
-        print("GROQ Error:", e)
-        return UNKNOWN_TEXT, []
+
+        raw_content = (
+            response
+            .choices[0]
+            .message
+            .content
+        )
+
+        if not raw_content:
+            return (
+                UNKNOWN_TEXT,
+                []
+            )
+
+        data = json.loads(
+            raw_content.strip()
+        )
+
+        reply = str(
+            data.get(
+                "reply",
+                UNKNOWN_TEXT
+            )
+        ).strip()
+
+        if not reply:
+            reply = UNKNOWN_TEXT
+
+        raw_keys = data.get(
+            "image_keys",
+            []
+        )
+
+        if not isinstance(
+            raw_keys,
+            list
+        ):
+
+            raw_keys = []
+
+        image_keys = [
+            key
+            for key in raw_keys
+            if isinstance(key, str)
+            and key in IMAGE_KEYS
+        ]
+
+        return (
+            reply,
+            image_keys[:13]
+        )
+
+    except json.JSONDecodeError as exc:
+
+        print(
+            "❌ Groq JSON parse error:",
+            repr(exc)
+        )
+
+        return (
+            UNKNOWN_TEXT,
+            []
+        )
+
+    except Exception as exc:
+
+        print(
+            "❌ GROQ Error:",
+            repr(exc)
+        )
+
+        return (
+            UNKNOWN_TEXT,
+            []
+        )
 
 
 # =========================================================
-# PROCESS RESPONSE
+# RESPONSE PROCESSOR
 # =========================================================
 
-def process_ai_response(sender_id: str, user_text: str):
+def process_ai_response(
+    sender_id: str,
+    user_text: str
+):
+
     try:
-        faq_result = direct_faq_router(user_text, sender_id)
-        image_result = direct_image_router(user_text, sender_id)
 
-        default_buttons = [
-    {"content_type": "text", "title": "🏠 Загварууд", "payload": "PAYLOAD_MODEL"},
-    {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"},
-    {"content_type": "text", "title": "📍 Байршил", "payload": "PAYLOAD_LOCATION"},
-    {"content_type": "text", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
-]
+        user_text = (
+            user_text or ""
+        ).strip()
 
-        if faq_result or image_result:
-            if faq_result:
-                reply, show_carousel, custom_buttons = faq_result
-            else:
-                reply = "Мэдээж 😊 Дэлгэрэнгүй зургийг явууллаа."
-                show_carousel = False
-                custom_buttons = default_buttons
-
-            add_to_history(sender_id, "user", user_text)
-            add_to_history(sender_id, "assistant", reply)
-
-            if show_carousel == True:
-                send_fb_message(sender_id, reply)
-                send_carousel_menu(sender_id, quick_replies=default_buttons)
-            elif show_carousel == "MODEL":
-                send_fb_message(sender_id, reply)
-                send_model_carousel(sender_id, quick_replies=default_buttons)
-            else:
-                if image_result:
-                    send_fb_message(sender_id, reply)
-                    send_images_by_keys(sender_id, image_result[:12], quick_replies=custom_buttons or default_buttons)
-                else:
-                    send_fb_message(sender_id, reply, quick_replies=custom_buttons or default_buttons)
+        if not user_text:
             return
 
-        reply, image_keys = ask_groq(sender_id, user_text)
-        add_to_history(sender_id, "user", user_text)
-        add_to_history(sender_id, "assistant", reply)
+        print(
+            f"📩 USER [{sender_id}]: "
+            f"{user_text}"
+        )
+
+        # -----------------------------------------------
+        # Direct FAQ
+        # -----------------------------------------------
+
+        faq_result = direct_faq_router(
+            user_text,
+            sender_id
+        )
+
+        # -----------------------------------------------
+        # Direct images
+        # -----------------------------------------------
+
+        image_result = direct_image_router(
+            user_text,
+            sender_id
+        )
+
+        # -----------------------------------------------
+        # FAQ / Image found
+        # -----------------------------------------------
+
+        if faq_result or image_result:
+
+            if faq_result:
+
+                reply, show_carousel, custom_buttons = (
+                    faq_result
+                )
+
+            else:
+
+                reply = (
+                    "Мэдээж 😊 "
+                    "Дэлгэрэнгүй зургуудыг "
+                    "явууллаа."
+                )
+
+                show_carousel = False
+
+                custom_buttons = (
+                    DEFAULT_BUTTONS
+                )
+
+            # Memory
+            add_to_history(
+                sender_id,
+                "user",
+                user_text
+            )
+
+            add_to_history(
+                sender_id,
+                "assistant",
+                reply
+            )
+
+            # General carousel
+            if show_carousel is True:
+
+                send_fb_message(
+                    sender_id,
+                    reply
+                )
+
+                send_carousel_menu(
+                    sender_id,
+                    DEFAULT_BUTTONS
+                )
+
+            # Model carousel
+            elif show_carousel == "MODEL":
+
+                send_fb_message(
+                    sender_id,
+                    reply
+                )
+
+                send_model_carousel(
+                    sender_id,
+                    DEFAULT_BUTTONS
+                )
+
+            # Text + images
+            elif image_result:
+
+                send_fb_message(
+                    sender_id,
+                    reply
+                )
+
+                send_images_by_keys(
+                    sender_id,
+                    image_result,
+                    custom_buttons
+                    or DEFAULT_BUTTONS
+                )
+
+            # Text only
+            else:
+
+                send_fb_message(
+                    sender_id,
+                    reply,
+                    custom_buttons
+                    or DEFAULT_BUTTONS
+                )
+
+            print(
+                f"📤 BOT [{sender_id}]: "
+                f"{reply}"
+            )
+
+            return
+
+        # -----------------------------------------------
+        # Groq fallback
+        # -----------------------------------------------
+
+        reply, image_keys = ask_groq(
+            sender_id,
+            user_text
+        )
+
+        add_to_history(
+            sender_id,
+            "user",
+            user_text
+        )
+
+        add_to_history(
+            sender_id,
+            "assistant",
+            reply
+        )
+
+        print(
+            f"🤖 MINA [{sender_id}]: "
+            f"{reply}"
+        )
 
         if image_keys:
-            send_fb_message(sender_id, reply)
-            send_images_by_keys(sender_id, image_keys[:12], quick_replies=default_buttons)
-        else:
-            send_fb_message(sender_id, reply, quick_replies=default_buttons)
 
-    except Exception as e:
-        print("Response Process Error:", repr(e))
-        send_fb_message(sender_id, "Уучлаарай, түр зуурын алдаа гарлаа. 9430-7017 дугаараар холбогдоорой 😊")
+            send_fb_message(
+                sender_id,
+                reply
+            )
+
+            send_images_by_keys(
+                sender_id,
+                image_keys,
+                DEFAULT_BUTTONS
+            )
+
+        else:
+
+            send_fb_message(
+                sender_id,
+                reply,
+                DEFAULT_BUTTONS
+            )
+
+    except Exception as exc:
+
+        print(
+            "❌ Response Process Error:",
+            repr(exc)
+        )
+
+        send_fb_message(
+            sender_id,
+            "Уучлаарай, түр зуурын алдаа "
+            f"гарлаа. Та {SALES_PHONE} "
+            "дугаараар холбогдоорой 😊"
+        )
 
 
 # =========================================================
-# META WEBHOOKS
+# META WEBHOOK PAYLOAD MAP
+# =========================================================
+
+PAYLOAD_MAP = {
+
+    "GET_STARTED":
+        "сайн уу",
+
+    "PAYLOAD_PRICE":
+        "үнэ",
+
+    "PAYLOAD_INFO":
+        "танилцуулга",
+
+    "PAYLOAD_MODEL":
+        "сонголт",
+
+    "PAYLOAD_LOCATION":
+        "байршил",
+
+    "PAYLOAD_FEATURES":
+        "онцлог",
+
+    "PAYLOAD_CONTACT":
+        "утас",
+
+    "PAYLOAD_TOWN":
+        "таун хаус",
+
+    "PAYLOAD_MULT":
+        "мульт хаус"
+}
+
+
+# =========================================================
+# META WEBHOOK VERIFY
 # =========================================================
 
 @app.get("/webhook")
-async def verify_webhook(request: Request):
+async def verify_webhook(
+    request: Request
+):
+
     params = request.query_params
-    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
-        return Response(content=params.get("hub.challenge", ""), media_type="text/plain")
-    raise HTTPException(status_code=403, detail="Verification failed")
+
+    mode = params.get(
+        "hub.mode"
+    )
+
+    verify_token = params.get(
+        "hub.verify_token"
+    )
+
+    challenge = params.get(
+        "hub.challenge",
+        ""
+    )
+
+    if (
+        mode == "subscribe"
+        and verify_token == VERIFY_TOKEN
+    ):
+
+        print(
+            "✅ Meta webhook verified."
+        )
+
+        return Response(
+            content=challenge,
+            media_type="text/plain"
+        )
+
+    print(
+        "❌ Meta webhook verification failed."
+    )
+
+    raise HTTPException(
+        status_code=403,
+        detail="Verification failed"
+    )
+
+
+# =========================================================
+# META WEBHOOK POST
+# =========================================================
 
 @app.post("/webhook")
-async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
+async def handle_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks
+):
+
     try:
+
         data = await request.json()
-    except Exception:
-        return Response(content="INVALID_JSON", status_code=400)
+
+    except Exception as exc:
+
+        print(
+            "❌ Invalid JSON:",
+            repr(exc)
+        )
+
+        return Response(
+            content="INVALID_JSON",
+            status_code=400
+        )
 
     if data.get("object") != "page":
-        return Response(content="NOT_A_PAGE_EVENT", status_code=404)
 
-    payload_map = {
-        "GET_STARTED": "сайн уу",
-        "PAYLOAD_PRICE": "үнэ",
-        "PAYLOAD_INFO": "танилцуулга",
-        "PAYLOAD_MODEL": "сонголт",
-        "PAYLOAD_LOCATION": "байршил",
-        "PAYLOAD_FEATURES": "онцлог",
-        "PAYLOAD_CONTACT": "утас",
-        "PAYLOAD_TOWN": "таун хаус",
-        "PAYLOAD_MULT": "мульт хаус"
-    }
+        return Response(
+            content="NOT_A_PAGE_EVENT",
+            status_code=404
+        )
 
-    for entry in data.get("entry", []):
-        for messaging_event in entry.get("messaging", []):
-            sender_id = messaging_event.get("sender", {}).get("id")
-            message = messaging_event.get("message")
-            postback = messaging_event.get("postback")
-            
-            user_text = ""
-            if message and not message.get("is_echo"):
-                if "quick_reply" in message:
-                    raw_payload = message["quick_reply"].get("payload", "").strip()
-                    user_text = payload_map.get(raw_payload, raw_payload)
-                else:
-                    user_text = message.get("text", "").strip()
-            elif postback:
-                raw_payload = postback.get("payload", "").strip()
-                user_text = payload_map.get(raw_payload, raw_payload)
+    try:
 
-            if sender_id and user_text:
-                background_tasks.add_task(process_ai_response, sender_id, user_text)
+        for entry in data.get(
+            "entry",
+            []
+        ):
 
-    return Response(content="EVENT_RECEIVED", status_code=200)
+            for messaging_event in entry.get(
+                "messaging",
+                []
+            ):
+
+                sender_id = (
+                    messaging_event
+                    .get("sender", {})
+                    .get("id")
+                )
+
+                if not sender_id:
+                    continue
+
+                message = (
+                    messaging_event
+                    .get("message")
+                )
+
+                postback = (
+                    messaging_event
+                    .get("postback")
+                )
+
+                user_text = ""
+
+                # -----------------------------------------
+                # Message
+                # -----------------------------------------
+
+                if (
+                    message
+                    and not message.get(
+                        "is_echo",
+                        False
+                    )
+                ):
+
+                    # Quick reply
+                    if "quick_reply" in message:
+
+                        raw_payload = (
+                            message
+                            .get(
+                                "quick_reply",
+                                {}
+                            )
+                            .get(
+                                "payload",
+                                ""
+                            )
+                            .strip()
+                        )
+
+                        user_text = (
+                            PAYLOAD_MAP.get(
+                                raw_payload,
+                                raw_payload
+                            )
+                        )
+
+                    # Normal text
+                    else:
+
+                        user_text = (
+                            message
+                            .get(
+                                "text",
+                                ""
+                            )
+                            .strip()
+                        )
+
+                # -----------------------------------------
+                # Postback
+                # -----------------------------------------
+
+                elif postback:
+
+                    raw_payload = (
+                        postback
+                        .get(
+                            "payload",
+                            ""
+                        )
+                        .strip()
+                    )
+
+                    user_text = (
+                        PAYLOAD_MAP.get(
+                            raw_payload,
+                            raw_payload
+                        )
+                    )
+
+                # -----------------------------------------
+                # Process
+                # -----------------------------------------
+
+                if (
+                    sender_id
+                    and user_text
+                ):
+
+                    background_tasks.add_task(
+                        process_ai_response,
+                        sender_id,
+                        user_text
+                    )
+
+        return Response(
+            content="EVENT_RECEIVED",
+            status_code=200
+        )
+
+    except Exception as exc:
+
+        print(
+            "❌ Webhook processing error:",
+            repr(exc)
+        )
+
+        # Meta-д 200 буцаах нь webhook retry
+        # үүсэхээс сэргийлнэ.
+        return Response(
+            content="EVENT_RECEIVED",
+            status_code=200
+        )
+
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
 @app.get("/")
 async def root():
-    return {"status": "Miners Villa bot is running reliably"}
+
+    return {
+        "status":
+            "Miners Villa bot is running",
+        "groq":
+            bool(GROQ_API_KEY),
+        "meta":
+            bool(META_PAGE_ACCESS_TOKEN),
+        "model":
+            GROQ_MODEL,
+        "photos":
+            PHOTO_FOLDER.exists(),
+    }
+
+
+@app.get("/health")
+async def health():
+
+    return {
+        "ok": True,
+        "groq_configured":
+            bool(GROQ_API_KEY),
+        "meta_configured":
+            bool(META_PAGE_ACCESS_TOKEN),
+        "photo_folder":
+            str(PHOTO_FOLDER),
+        "photo_count":
+            len(
+                [
+                    f
+                    for f in PHOTO_FOLDER.iterdir()
+                    if f.is_file()
+                ]
+            )
+            if PHOTO_FOLDER.exists()
+            else 0
+    }
+
+
+# =========================================================
+# LOCAL RUN
+# =========================================================
+
+if __name__ == "__main__":
+
+    import uvicorn
+
+    port = int(
+        os.getenv(
+            "PORT",
+            "8000"
+        )
+    )
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port
+    )
