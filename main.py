@@ -24,8 +24,7 @@ load_dotenv()
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "miners_villa_secret_123")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # =========================================================
 # APP + PHOTO ROUTE (Case-Insensitive & Reliable)
@@ -327,7 +326,6 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
     if match_any(completion_keywords, t):
         return ("2026 оны өвөл гэхэд дотоод заслын ажлыг эхлүүлэхээр ажиллаж байна. Дэлгэрэнгүйг 9430-7017 дугаараас лавлана уу 😊", False, default_buttons)
 
-    return None
 # 11. Очиж үзэх / Оффис / Уулзах
     visit_keywords = ["очиж", "узэх", "харж болох", "харах", "уулзах", "оффис", "очиж харах"]
     if match_any(visit_keywords, t):
@@ -338,6 +336,9 @@ def direct_faq_router(user_text: str, sender_id: str = "") -> Optional[Tuple[str
             f"☎️ Борлуулалтын утас: {SALES_PHONE}"
         )
         return (reply, False, default_buttons)
+
+    return None
+
 
 
 # =========================================================
@@ -456,7 +457,7 @@ def send_model_carousel(recipient_id: str, quick_replies: Optional[List[Dict]] =
 
 def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies: Optional[List[Dict]] = None):
     if not image_keys or not META_PAGE_ACCESS_TOKEN:
-        print("❌ Грешка: Липсват image_keys или META_PAGE_ACCESS_TOKEN")
+        print("❌ Алдаа: image_keys эсвэл META_PAGE_ACCESS_TOKEN байхгүй байна")
         return
 
     elements = []
@@ -470,17 +471,17 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies:
 
         if local_path and local_path.is_file():
             public_url = get_public_image_url(local_path.name)
-            print(f"📸 Намерена снимка: {key} -> {public_url}")
+            print(f"📸 Зураг олдлоо: {key} -> {public_url}")
             elements.append({
                 "title": f"Miners Villa - {key.replace('_', ' ')}",
                 "image_url": public_url,
                 "buttons": [{"type": "web_url", "url": public_url, "title": "🔍 Томруулж харах"}]
             })
         else:
-            print(f"⚠️ Файлът НЕ Е намерен за ключ: {key} (stem: {stem})")
+            print(f"⚠️ Энэ түлхүүрт тохирох файл олдсонгүй: {key} (stem: {stem})")
 
     if not elements:
-        print("❌ Няма налични елементи/снимки за изпращане!")
+        print("❌ Илгээх боломжтой зураг олдсонгүй!")
         send_fb_message(
             recipient_id, 
             "⚠️ Уучлаарай, одоогоор энэ загварын зургууд системд оруулаагүй байна.", 
@@ -488,7 +489,7 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies:
         )
         return
 
-    # Разделяне на снимките в пакети по 5 броя
+    # Зургуудыг 5, 5-аар нь багцлан хуваах
     chunks = [elements[i:i + 5] for i in range(0, len(elements), 5)]
 
     for i, chunk in enumerate(chunks):
@@ -502,7 +503,7 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies:
             }
         }
 
-        # Добавяне на бързите бутони към последния пакет
+        # Сүүлийн багц руу хурдан хариулах бутонуудыг (quick replies) нэмэх
         if quick_replies and i == len(chunks) - 1:
             payload["message"]["quick_replies"] = quick_replies
 
@@ -510,7 +511,7 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies:
             res = requests.post(messenger_url(), json=payload, headers={"Content-Type": "application/json"}, timeout=10)
             print(f"📡 Facebook API Статус [Пакет {i+1}]: {res.status_code} - {res.text}")
         except Exception as e:
-            print(f"❌ Грешка при изпращане на пакет {i+1}:", repr(e))
+            print(f"❌ Багц илгээхэд алдаа гарлаа {i+1}:", repr(e))
         
         time.sleep(0.5)
 
@@ -521,21 +522,27 @@ def send_images_by_keys(recipient_id: str, image_keys: List[str], quick_replies:
 def ask_groq(sender_id: str, user_text: str):
     if not client: return UNKNOWN_TEXT, []
     
-    prompt = f"""
+    sys_prompt = f"""
 {SYSTEM_PROMPT}
 
-ӨМНӨХ ЯРИА: {history_text(sender_id)}
-ШИНЭ МЕССЕЖ: {user_text}
+ЧУХАЛ ЗААВАР:
+Та заавал дараах JSON форматаар хариулна уу:
+{{ "reply": "Минагийн өгөх эелдэг, зөөлөн хариулт", "image_keys": [] }}
+"""
 
-JSON буцаах формат:
-{{ "reply": "Эелдэг, богино хариулт", "image_keys": [] }}
+    user_prompt = f"""
+ӨМНӨХ ЯРИА:
+{history_text(sender_id)}
+
+ХЭРЭГЛЭГЧИЙН ШИНЭ АСУУЛТ:
+{user_text}
 """
     try:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant designed to output only JSON."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": user_prompt}
             ],
             response_format={"type": "json_object"},
             temperature=0.3, max_tokens=500,
@@ -543,7 +550,7 @@ JSON буцаах формат:
         data = json.loads(response.choices[0].message.content.strip())
         reply = str(data.get("reply", UNKNOWN_TEXT)).strip()
         keys = [k for k in data.get("image_keys", []) if k in IMAGE_LIBRARY]
-        return reply, keys[:4]
+        return reply, keys[:13]
     except Exception as e:
         print("GROQ Error:", e)
         return UNKNOWN_TEXT, []
@@ -559,10 +566,11 @@ def process_ai_response(sender_id: str, user_text: str):
         image_result = direct_image_router(user_text, sender_id)
 
         default_buttons = [
-            {"content_type": "text", "title": "🏡 Таун хаус", "payload": "PAYLOAD_TOWN"},
-            {"content_type": "text", "title": "🏢 Мульт хаус", "payload": "PAYLOAD_MULT"},
-            {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"}
-        ]
+    {"content_type": "text", "title": "🏠 Загварууд", "payload": "PAYLOAD_MODEL"},
+    {"content_type": "text", "title": "💰 Үнэ", "payload": "PAYLOAD_PRICE"},
+    {"content_type": "text", "title": "📍 Байршил", "payload": "PAYLOAD_LOCATION"},
+    {"content_type": "text", "title": "☎️ Холбоо барих", "payload": "PAYLOAD_CONTACT"}
+]
 
         if faq_result or image_result:
             if faq_result:
