@@ -220,9 +220,13 @@ def direct_image_router(user_text: str, sender_id: str = "") -> Optional[List[st
     if re.search(r"\b(212|213)\b", t): return ["TOWNHOUSE_212", "TOWNHOUSE_212_1", "GENERAL_PLAN"]
     if re.search(r"\b(266|267)\b", t): return ["TOWNHOUSE_266", "TOWNHOUSE_266_1", "GENERAL_PLAN"]
 
+    # 212 м² болон 266 м² тус бүрийн 2, 2 зургийг (Гадна төрх + Давхрын зохион байгуулалт) дарааллуулж оруулах
     if match_any(["таун хаус", "таунхаус", "таун", "taun", "townhouse"], t): 
-        return ["TOWNHOUSE_212", "TOWNHOUSE_266", "TOWNHOUSE_212_1", "TOWNHOUSE_266_1"]
-
+        return [
+            "TOWNHOUSE_212_1", "TOWNHOUSE_212",  # 212 м²-ийн 2 зураг (Гадна үзэмж + Загвар)
+            "TOWNHOUSE_266_1", "TOWNHOUSE_266"   # 266 м²-ийн 2 зураг (Гадна үзэмж + Загвар)
+        ]
+    
     if match_any(["мульт хаус", "мультхаус", "мульт", "mult", "мулт"], t): 
         return [
             "MULT", "MULT_100", "MULT_116", "MULT_120", "MULT_125", 
