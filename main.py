@@ -35,7 +35,7 @@ GROQ_API_KEY = os.getenv(
 
 GROQ_MODEL = os.getenv(
     "GROQ_MODEL",
-    "llama-3.3-70b-versatile"
+    "openai/gpt-oss-120b"
 )
 
 PUBLIC_BASE_URL = os.getenv(
@@ -946,7 +946,11 @@ def direct_faq_router(
             "сонголтууд үлдсэн байгаа. 😊\n\n"
             f"☎️ Дэлгэрэнгүй мэдээлэл: {SALES_PHONE}"
         )
-        return (reply, False, default_buttons)
+        return (
+            reply, 
+            False, 
+            DEFAULT_BUTTONS
+        )
     # -----------------------------------------------------
     # 9. Payment
     # -----------------------------------------------------
@@ -1080,7 +1084,11 @@ def direct_faq_router(
             "сонголтууд үлдсэн байгаа. 😊\n\n"
             f"☎️ Дэлгэрэнгүй мэдээлэл: {SALES_PHONE}"
         )
-        return (reply, False, default_buttons)
+        return (
+            reply, 
+            False, 
+            DEFAULT_BUTTONS
+        )
 
     # -----------------------------------------------------
     # 14. Return nothing
@@ -1897,7 +1905,7 @@ def ask_groq(
             []
         )
 
-       except Exception as e:
+      except Exception as e:
         print("❌ GROQ ERROR:", repr(e))
         return (
             "Уучлаарай, Mina-ийн AI хэсэгт түр зуурын холболтын алдаа гарлаа. "
