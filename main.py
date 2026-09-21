@@ -926,9 +926,29 @@ def direct_faq_router(
             False,
             DEFAULT_BUTTONS
         )
+    
+    # 8. Сингл / Твин хаус - БОРЛУУЛАЛТ ДУУССАН
+    sold_out_keywords = [
+        "сингл",
+        "сингл хаус",
+        "single",
+        "single house",
+        "твин",
+        "твин хаус",
+        "twin",
+        "twin house"
+    ]
 
+    if match_any(sold_out_keywords, t):
+        reply = (
+            "🏡 Сингл болон Твин хаусны борлуулалт дууссан байна. "
+            "Одоогоор Miners Villa төслөөс Таун хаус болон Мульт хаусны "
+            "сонголтууд үлдсэн байгаа. 😊\n\n"
+            f"☎️ Дэлгэрэнгүй мэдээлэл: {SALES_PHONE}"
+        )
+        return (reply, False, default_buttons)
     # -----------------------------------------------------
-    # 8. Payment
+    # 9. Payment
     # -----------------------------------------------------
 
     payment_keywords = [
@@ -951,7 +971,7 @@ def direct_faq_router(
         )
 
     # -----------------------------------------------------
-    # 9. Parking
+    # 10. Parking
     # -----------------------------------------------------
 
     parking_keywords = [
@@ -975,7 +995,7 @@ def direct_faq_router(
         )
 
     # -----------------------------------------------------
-    # 10. Completion
+    # 11. Completion
     # -----------------------------------------------------
 
     completion_keywords = [
@@ -1006,7 +1026,7 @@ def direct_faq_router(
         )
 
     # -----------------------------------------------------
-    # 11. Visit / Office
+    # 12. Visit / Office
     # -----------------------------------------------------
 
     visit_keywords = [
@@ -1039,9 +1059,31 @@ def direct_faq_router(
             False,
             DEFAULT_BUTTONS
         )
+    # 13. SINGLE / TWIN HOUSE - SOLD OUT
+    sold_out_keywords = [
+        "сингл",
+        "сингл хаус",
+        "single",
+        "single house",
+        "твин",
+        "твин хаус",
+        "twin",
+        "twin house",
+    ]
+
+    if match_any(sold_out_keywords, t):
+        reply = (
+            "🏡 Сингл болон Твин хаусны борлуулалт дууссан байна.\n\n"
+            "Одоогоор Miners Villa төслөөс:\n"
+            "🏠 Таун хаус\n"
+            "🏢 Мульт хаус\n"
+            "сонголтууд үлдсэн байгаа. 😊\n\n"
+            f"☎️ Дэлгэрэнгүй мэдээлэл: {SALES_PHONE}"
+        )
+        return (reply, False, default_buttons)
 
     # -----------------------------------------------------
-    # 12. Return nothing
+    # 14. Return nothing
     # -----------------------------------------------------
 
     return None
@@ -1855,11 +1897,12 @@ def ask_groq(
             []
         )
 
-    except Exception as exc:
-
-        print(
-            "❌ GROQ Error:",
-            repr(exc)
+       except Exception as e:
+        print("❌ GROQ ERROR:", repr(e))
+        return (
+            "Уучлаарай, Mina-ийн AI хэсэгт түр зуурын холболтын алдаа гарлаа. "
+            f"Манай борлуулалтын алба: {SALES_PHONE} 😊",
+            []
         )
 
         return (
