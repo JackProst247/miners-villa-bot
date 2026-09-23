@@ -29,13 +29,12 @@ META_PAGE_ACCESS_TOKEN = os.getenv(
     "META_PAGE_ACCESS_TOKEN"
 )
 
-GROQ_API_KEY = os.getenv(
-    "GROQ_API_KEY"
+# Render-ийн environment variable-аас хамаарахгүйгээр хатуу зааж өгнө
+GROQ_MODEL = "llama-3.3-70b-versatile"
 )
 
 GROQ_MODEL = os.getenv(
-    "GROQ_MODEL",
-    "openai/gpt-oss-120b"
+    "GROQ_MODEL = "llama-3.3-70b-versatile""
 )
 
 PUBLIC_BASE_URL = os.getenv(
@@ -1766,8 +1765,10 @@ def ask_groq(
     user_text: str
 ) -> Tuple[str, List[str]]:
 
+    print(f"🤖 AI ажиллаж эхэллээ. Модел: {GROQ_MODEL}", flush=True)
+
     if not client:
-        print("⚠️ Groq client байхгүй.")
+        print("⚠️ Groq client байхгүй байна! GROQ_API_KEY-ээ шалгаарай.", flush=True)
         return (UNKNOWN_TEXT, [])
 
     user_prompt = f"""
@@ -1781,7 +1782,6 @@ def ask_groq(
 """
 
     last_error = None
-    # Алдаа гарвал 3 удаа дахин оролдоно
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
@@ -1822,31 +1822,20 @@ def ask_groq(
 
             return (reply, image_keys[:13])
 
-        except json.JSONDecodeError as exc:
-            last_error = exc
-            print(f"❌ Groq JSON parse error (attempt {attempt + 1}/3):", repr(exc))
-            if attempt < 2:
-                import time # Хэрэв import хийгдээгүй байвал
-                time.sleep(2)
-                continue
-            break
-
         except Exception as e:
             last_error = e
-            print(f"❌ GROQ ERROR (attempt {attempt + 1}/3):", repr(e))
+            print(f"❌ GROQ ERROR ({attempt + 1}/3): {type(e).__name__} - {e}", flush=True)
             if attempt < 2:
                 import time
                 time.sleep(2)
                 continue
             break
 
-    print("❌ Эцсийн байдлаар AI ажилласангүй:", repr(last_error))
+    print(f"❌ Эцсийн байдлаар AI ажилласангүй: {last_error}", flush=True)
     return (
-        "Уучлаарай, Mina-ийн AI хэсэгт түр зуурын холболтын алдаа гарлаа. "
-        f"Манай борлуулалтын алба: {SALES_PHONE} 😊",
+        f"Уучлаарай, Mina-ийн AI хэсэгт түр зуурын холболтын алдаа гарлаа. Манай борлуулалтын алба: {SALES_PHONE} 😊",
         []
     )
-
 # =========================================================
 # RESPONSE PROCESSOR
 # =========================================================
