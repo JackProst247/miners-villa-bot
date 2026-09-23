@@ -1018,8 +1018,7 @@ def direct_faq_router(
         reply = (
             "2026 оны өвөл гэхэд дотоод заслын "
             "ажлыг эхлүүлэхээр ажиллаж байна.\n\n"
-            "Яг таг ашиглалтад орох огноог "
-            "зохиож хэлэхгүй. Шинэ мэдээллийг "
+            "Шинэчлэгдсэн мэдээллийг "
             f"{SALES_PHONE} дугаараас лавлаарай 😊"
         )
 
@@ -1055,7 +1054,8 @@ def direct_faq_router(
             "дэлгэрэнгүй мэдээлэл болон "
             "загвартай танилцах боломжтой.\n\n"
             f"📍 Хаяг: {SALES_OFFICE}\n"
-            f"☎️ Утас: {SALES_PHONE}"
+            f"☎️ Утас: {SALES_PHONE}\n\n"
+            "Хэрэв та төслийн талбайтай танилцахыг хүсвэл манай борлуулалтын албатай {SALES_PHONE} дугаараар холбогдон цаг товлон очиж үзэх боломжтой."
         )
 
         return (
@@ -1729,49 +1729,30 @@ def send_images_by_keys(
 # =========================================================
 
 SYSTEM_PROMPT = f"""
-ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН
-эелдэг, зөөлөн, тусч борлуулалтын чатбот.
+ТА БОЛ "МИНА" — MINERS VILLA ТӨСЛИЙН 23 НАСТАЙ, ЭЕЛДЭГ, ЗӨӨЛӨН, ТУСЧ БОРЛУУЛАГЧ.
 
-ТАНЫ ҮНДСЭН ҮҮРЭГ:
-
-1. Хэрэглэгчийн асуултыг ойлгож хариулах.
-2. Miners Villa-ийн баталгаатай мэдээллийг ашиглах.
-3. Худал мэдээлэл зохиохгүй.
-4. Мэдэхгүй мэдээллийг баталгаатай мэт хэлэхгүй.
-5. Тодорхой мэдээлэл байхгүй бол борлуулалтын
-   {SALES_PHONE} дугаарыг санал болгох.
-6. Хэрэглэгч бухимдсан бол маргалдахгүй.
-7. Гомдол, санал байвал эелдгээр хүлээн авч,
-   асуудлыг ойлгосноо харуулах.
-8. Хэрэглэгчийн асуултад аль болох товч,
-   ойлгомжтой Монгол хэлээр хариулах.
-9. Хэт урт тайлбар хэрэггүй.
-10. Үнэ, төлбөр, талбай, байршил зэрэг тоон
-    мэдээллийг дур мэдэн өөрчлөхгүй.
+ЗОРИЛГО БОЛОН ҮҮРЭГ:
+1. Автомат түлхүүр үгэнд таараагүй, эсвэл үйлчлүүлэгч англи/монгол крилл хольж алдаатай, галиглаж бичсэн үед зөвөөр ойлгож тайлбарлах.
+2. Хэрэв үйлчлүүлэгч бухимдсан, ууртай байвал тайвшруулж, маш эелдэг, найрсаг байдлаар зөв мэдээллийг өгөх.
+3. Miners Villa-ийн талаар үнэн зөв мэдээлэл өгч, хүнтэй бодитоор ярилцаж байгаа мэт дулаахан, богино хариулах.
+4. Худал мэдээлэл зохиохгүй, мэдэхгүй зүйл байвал {SALES_PHONE} дугаар руу холбогдохыг эелдгээр зөвлөх.
 
 ТӨСЛИЙН БАТАЛГААТ МЭДЭЭЛЭЛ:
-
 {PROJECT_KNOWLEDGE}
 
 ЧУХАЛ:
-
-- Яг таг ашиглалтад орох огноо зохиож болохгүй.
-- Тодорхойгүй зүйлийг "мэдэхгүй" гэж хэлж болно.
-- Худалдан авалтын шийдвэрт дарамт үзүүлэхгүй.
-- "Өнөөдөр л", "сүүлчийн байр", "яараарай" гэх мэт
-  баталгаагүй борлуулалтын шахалт бүү ашигла.
-- Хэрэглэгч зураг хүсвэл image_keys ашиглаж болно.
+- Яг таг ашиглалтад орох огноо зохиож болохгүй. "2026 оны өвөл дотоод засал эхлэнэ" гэж хариулах.
+- Худалдан авалтын шийдвэрт дарамт үзүүлэхгүй, шахалт үзүүлэхгүй.
+- Хэрэглэгч зураг хүсвэл image_keys ашиглаж болно, зураг хүсээгүй бол хоосон орхино.
 - Зөвхөн IMAGE_LIBRARY-д байгаа key ашиглана.
 
 ТА ЗААВАЛ ДАРААХ JSON ФОРМАТААР ХАРИУЛ:
-
 {{
     "reply": "Минагийн хариулт",
     "image_keys": []
 }}
 
 image_keys нь дараах боломжит утгуудын аль нэг байна:
-
 {", ".join(sorted(IMAGE_KEYS))}
 """
 
@@ -1786,138 +1767,85 @@ def ask_groq(
 ) -> Tuple[str, List[str]]:
 
     if not client:
-
-        print(
-            "⚠️ Groq client байхгүй."
-        )
-
-        return (
-            UNKNOWN_TEXT,
-            []
-        )
+        print("⚠️ Groq client байхгүй.")
+        return (UNKNOWN_TEXT, [])
 
     user_prompt = f"""
 ӨМНӨХ ЯРИА:
-
 {history_text(sender_id)}
 
 ХЭРЭГЛЭГЧИЙН ШИНЭ МЕССЕЖ:
-
 {user_text}
 
 Дээрх мэдээлэлд тулгуурлан хариул.
 """
 
-    try:
-
-        response = client.chat.completions.create(
-
-            model=GROQ_MODEL,
-
-            messages=[
-                {
-                    "role":
-                        "system",
-
-                    "content":
-                        SYSTEM_PROMPT
-                },
-
-                {
-                    "role":
-                        "user",
-
-                    "content":
-                        user_prompt
-                }
-            ],
-
-            response_format={
-                "type":
-                    "json_object"
-            },
-
-            temperature=0.2,
-
-            max_tokens=500
-        )
-
-        raw_content = (
-            response
-            .choices[0]
-            .message
-            .content
-        )
-
-        if not raw_content:
-            return (
-                UNKNOWN_TEXT,
-                []
+    last_error = None
+    # Алдаа гарвал 3 удаа дахин оролдоно
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant designed to output only JSON. " + SYSTEM_PROMPT
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt
+                    }
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=500
             )
 
-        data = json.loads(
-            raw_content.strip()
-        )
+            raw_content = response.choices[0].message.content
+            if not raw_content:
+                return (UNKNOWN_TEXT, [])
 
-        reply = str(
-            data.get(
-                "reply",
-                UNKNOWN_TEXT
-            )
-        ).strip()
+            data = json.loads(raw_content.strip())
+            
+            reply = str(data.get("reply", UNKNOWN_TEXT)).strip()
+            if not reply:
+                reply = UNKNOWN_TEXT
 
-        if not reply:
-            reply = UNKNOWN_TEXT
+            raw_keys = data.get("image_keys", [])
+            if not isinstance(raw_keys, list):
+                raw_keys = []
 
-        raw_keys = data.get(
-            "image_keys",
-            []
-        )
+            image_keys = [
+                key for key in raw_keys
+                if isinstance(key, str) and key in IMAGE_KEYS
+            ]
 
-        if not isinstance(
-            raw_keys,
-            list
-        ):
+            return (reply, image_keys[:13])
 
-            raw_keys = []
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            print(f"❌ Groq JSON parse error (attempt {attempt + 1}/3):", repr(exc))
+            if attempt < 2:
+                import time # Хэрэв import хийгдээгүй байвал
+                time.sleep(2)
+                continue
+            break
 
-        image_keys = [
-            key
-            for key in raw_keys
-            if isinstance(key, str)
-            and key in IMAGE_KEYS
-        ]
+        except Exception as e:
+            last_error = e
+            print(f"❌ GROQ ERROR (attempt {attempt + 1}/3):", repr(e))
+            if attempt < 2:
+                import time
+                time.sleep(2)
+                continue
+            break
 
-        return (
-            reply,
-            image_keys[:13]
-        )
-
-    except json.JSONDecodeError as exc:
-
-        print(
-            "❌ Groq JSON parse error:",
-            repr(exc)
-        )
-
-        return (
-            UNKNOWN_TEXT,
-            []
-        )
-
-      except Exception as e:
-        print("❌ GROQ ERROR:", repr(e))
-        return (
-            "Уучлаарай, Mina-ийн AI хэсэгт түр зуурын холболтын алдаа гарлаа. "
-            f"Манай борлуулалтын алба: {SALES_PHONE} 😊",
-            []
-        )
-
-        return (
-            UNKNOWN_TEXT,
-            []
-        )
-
+    print("❌ Эцсийн байдлаар AI ажилласангүй:", repr(last_error))
+    return (
+        "Уучлаарай, Mina-ийн AI хэсэгт түр зуурын холболтын алдаа гарлаа. "
+        f"Манай борлуулалтын алба: {SALES_PHONE} 😊",
+        []
+    )
 
 # =========================================================
 # RESPONSE PROCESSOR
