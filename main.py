@@ -29,20 +29,13 @@ META_PAGE_ACCESS_TOKEN = os.getenv(
     "META_PAGE_ACCESS_TOKEN"
 )
 
-# Render-ийн environment variable-аас хамаарахгүйгээр хатуу зааж өгнө
-GROQ_MODEL = "llama-3.3-70b-versatile"
-)
-
-GROQ_MODEL = os.getenv(
-    "GROQ_MODEL = "llama-3.3-70b-versatile""
-)
+# Groq загварын нэрийг зааж өгөх (хэрэв env-д байхгүй бол llama-3.3-70b-versatile ашиглана)
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 PUBLIC_BASE_URL = os.getenv(
     "PUBLIC_BASE_URL",
     "https://miners-villa-bot.onrender.com"
 ).rstrip("/")
-
-
 # =========================================================
 # FASTAPI APP
 # =========================================================
