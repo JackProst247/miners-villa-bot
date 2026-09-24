@@ -1742,17 +1742,22 @@ SYSTEM_PROMPT = f"""
 - Худалдан авалтын шийдвэрт дарамт үзүүлэхгүй, шахалт үзүүлэхгүй.
 - Хэрэглэгч зураг хүсвэл image_keys ашиглаж болно, зураг хүсээгүй бол хоосон орхино.
 - Зөвхөн IMAGE_LIBRARY-д байгаа key ашиглана.
+- Хэрэв хэрэглэгч байр, машин, газар, хөрөнгө оролцуулах, бартер хийх, солих тухай санал гаргавал "is_barter" талбарыг true болгоно. Бусад үед false байна.
 
 ТА ЗААВАЛ ДАРААХ JSON ФОРМАТААР ХАРИУЛ:
 {{
     "reply": "Минагийн хариулт",
-    "image_keys": []
+    "image_keys": [],
+    "is_barter": false
 }}
 
 image_keys нь дараах боломжит утгуудын аль нэг байна:
 {", ".join(sorted(IMAGE_KEYS))}
 """
 
+# =========================================================
+# GROQ AI
+# =========================================================
 
 # =========================================================
 # GROQ AI
@@ -1761,13 +1766,13 @@ image_keys нь дараах боломжит утгуудын аль нэг б�
 def ask_groq(
     sender_id: str,
     user_text: str
-) -> Tuple[str, List[str]]:
+) -> Tuple[str, List[str], bool]:
 
     print(f"🤖 AI ажиллаж эхэллээ. Модел: {GROQ_MODEL}", flush=True)
 
     if not client:
         print("⚠️ Groq client байхгүй байна! GROQ_API_KEY-ээ шалгаарай.", flush=True)
-        return (UNKNOWN_TEXT, [])
+        return (UNKNOWN_TEXT, [], False)
 
     user_prompt = f"""
 ӨМНӨХ ЯРИА:
@@ -1796,18 +1801,21 @@ def ask_groq(
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.3,
-                max_tokens=500
+                max_tokens=2048
             )
 
             raw_content = response.choices[0].message.content
             if not raw_content:
-                return (UNKNOWN_TEXT, [])
+                return (UNKNOWN_TEXT, [], False)
 
             data = json.loads(raw_content.strip())
             
             reply = str(data.get("reply", UNKNOWN_TEXT)).strip()
             if not reply:
                 reply = UNKNOWN_TEXT
+
+            # JSON-оос is_barter-ийг унших
+            is_barter = bool(data.get("is_barter", False))
 
             raw_keys = data.get("image_keys", [])
             if not isinstance(raw_keys, list):
@@ -1818,7 +1826,8 @@ def ask_groq(
                 if isinstance(key, str) and key in IMAGE_KEYS
             ]
 
-            return (reply, image_keys[:13])
+            # 3 утга буцаана
+            return (reply, image_keys[:13], is_barter)
 
         except Exception as e:
             last_error = e
@@ -1832,8 +1841,12 @@ def ask_groq(
     print(f"❌ Эцсийн байдлаар AI ажилласангүй: {last_error}", flush=True)
     return (
         f"Уучлаарай, Mina-ийн AI хэсэгт түр зуурын холболтын алдаа гарлаа. Манай борлуулалтын алба: {SALES_PHONE} 😊",
-        []
+        [],
+        False
     )
+
+
+
 # =========================================================
 # RESPONSE PROCESSOR
 # =========================================================
@@ -1972,25 +1985,27 @@ def process_ai_response(
 
             return
 
-        # -----------------------------------------------
+# -----------------------------------------------
         # Groq fallback
         # -----------------------------------------------
 
-        reply, image_keys = ask_groq(
+        reply, image_keys, is_barter = ask_groq(
             sender_id,
             user_text
         )
+
+        if is_barter:
+            # Админд илгээх дохио (Терминал дээр улаанаар анхааруулж гарна)
+            print(f"🚨 БАРТЕРЫН САНАЛ ИРЛЭЭ! Хэрэглэгч [{sender_id}]: {user_text}", flush=True)
+            
+            # Хэрэв та хүсвэл энд мөн шууд админ руу мессеж явуулах код дуудаж болно.
+            # Мөн хэрэглэгчийн хариуг автоматаар өөрчилж болно:
+            # reply = "Таны бартерын саналыг хүлээн авлаа. Борлуулалтын менежер удахгүй холбогдоно."
 
         add_to_history(
             sender_id,
             "user",
             user_text
-        )
-
-        add_to_history(
-            sender_id,
-            "assistant",
-            reply
         )
 
         print(
