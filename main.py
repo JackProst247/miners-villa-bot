@@ -32,7 +32,7 @@ META_PAGE_ACCESS_TOKEN = os.getenv(
 # Энэ мөрийг заавал нэмнэ:
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 PUBLIC_BASE_URL = os.getenv(
     "PUBLIC_BASE_URL",
