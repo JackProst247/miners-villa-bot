@@ -2093,48 +2093,22 @@ PAYLOAD_MAP = {
 # =========================================================
 
 @app.get("/webhook")
-async def verify_webhook(
-    request: Request
-):
-
+async def verify_webhook(request: Request):
     params = request.query_params
+    mode = params.get("hub.mode")
+    verify_token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge", "")
 
-    mode = params.get(
-        "hub.mode"
-    )
+    # АНХААР: VERIFY_TOKEN хувьсагчийн оронд шууд "MinersVilla123" гэж бичлээ
+    if mode == "subscribe" and verify_token == "MinersVilla123":
+        print("✅ Meta webhook verified.")
+        return Response(content=challenge, media_type="text/plain")
 
-    verify_token = params.get(
-        "hub.verify_token"
-    )
-
-    challenge = params.get(
-        "hub.challenge",
-        ""
-    )
-
-    if (
-        mode == "subscribe"
-        and verify_token == VERIFY_TOKEN
-    ):
-
-
-        print(
-            "✅ Meta webhook verified."
-        )
-
-        return Response(
-            content=challenge,
-            media_type="text/plain"
-        )
-
-    print(
-        "❌ Meta webhook verification failed."
-    )
-
-    raise HTTPException(
-        status_code=403,
-        detail="Verification failed"
-    )
+    # Алдаа гарвал Meta-аас яг юу ирснийг Render лог дээр хэвлэж харах
+    print(f"❌ Meta webhook verification failed.")
+    print(f"   Meta-аас ирсэн токен: '{verify_token}'")
+    
+    raise HTTPException(status_code=403, detail="Verification failed")
 
 
 # =========================================================
