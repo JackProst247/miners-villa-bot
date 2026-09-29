@@ -722,6 +722,8 @@ def direct_faq_router(
         "эхлэх",
         "хай",
         "bnu",
+        "Сайн байна уу?",
+        
         "мэдээлэл авий"
     ]
 
@@ -1050,7 +1052,6 @@ def direct_faq_router(
     # -----------------------------------------------------
 
     return None
-
 
 # =========================================================
 # FACEBOOK API
@@ -2066,16 +2067,13 @@ async def handle_webhook(
                         )
 
                     # Normal text
-                    else:
+                    elif "text" in message:
+                        user_text = message.get("text", "").strip()
 
-                        user_text = (
-                            message
-                            .get(
-                                "text",
-                                ""
-                            )
-                            .strip()
-                        )
+                    # Зураг, стикер (Like товч) зэрэг attachment ирсэн үед
+                    elif "attachments" in message:
+                        # Системд "сайн уу" гэж бичсэнтэй ижилхэнээр ойлгуулж, үндсэн цэсийг дуудах
+                        user_text = "сайн уу"
 
                 # -----------------------------------------
                 # Postback
