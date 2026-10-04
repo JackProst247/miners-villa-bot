@@ -761,7 +761,30 @@ def direct_faq_router(
         )
 
     # -----------------------------------------------------
-    # 2. Model selection
+    # 2. Calculation clarification
+    # -----------------------------------------------------
+    # Бартерын байрны мэдээллийг Miners Villa-ийн м² үнээр
+    # автоматаар үнэлсэн мэт ойлголт өгөхөөс сэргийлнэ.
+    calculation_question_keywords = [
+        "энэ тооцооллыг хэн хийсэн",
+        "тооцооллыг хэн хийсэн",
+        "энэ тооцоог хэн хийсэн",
+        "тооцоог хэн хийсэн",
+        "энэ тооцоо зөв үү",
+        "тооцоо зөв үү",
+        "ene tootsоо",
+        "hen hiisen",
+    ]
+
+    if match_any(calculation_question_keywords, t):
+        reply = (
+            "Энэ тооцоог Mina чатбот автоматаар жишээ болгон бодож үзүүлсэн юм 😊\n\n"
+            "Бартерт санал болгож буй байрны бодит үнэлгээ биш тул эцсийн дүнг борлуулалтын менежер шалгаж тогтооно."
+        )
+        return (reply, False, DEFAULT_BUTTONS)
+
+    # -----------------------------------------------------
+    # 3. Model selection
     # -----------------------------------------------------
 
     # Зөвхөн загвар сонголт асуусан үед MODEL carousel ажиллана.
@@ -1738,10 +1761,13 @@ def ask_groq(
 
 def detect_barter_offer(user_text: str) -> bool:
     """
-    Бартерын саналыг FAQ/IMAGE/GROQ-оос өмнө найдвартай танина.
+    Зөвхөн тухайн шинэ мессеж дээр үндэслэн бартерын санал танина.
 
-    Жишээ:
-    "Шинэ 2 өрөө байр гэрчилгээ бэлэн 12 давхарт 43.64м2"
+    Зорилго:
+    - Байр/машин/газар санал болгосон мессежийг шууд бартер гэж таних
+    - Дараагийн ердийн асуултыг (жишээ нь "энэ тооцооллыг хэн хийсэн бэ?")
+      бартер гэж буруу танихгүй байх
+    - Монгол + түгээмэл латин/роман бичлэгийг таних
     """
 
     t = normalize_text(user_text)
@@ -1779,6 +1805,25 @@ def detect_barter_offer(user_text: str) -> bool:
         "солилцож болох",
         "сольж болох уу",
         "сольж болох",
+        # Romanized
+        "barter",
+        "bartert",
+        "bairaa ogno",
+        "bairaa oroltsuulna",
+        "bair ogno",
+        "bair oroltsuulna",
+        "mashin ogno",
+        "mashinaa ogno",
+        "mashinaa ogood",
+        "mashin oroltsuulna",
+        "gazraa ogno",
+        "gazar ogno",
+        "gazraa oroltsuulna",
+        "oroltsuulj boloh uu",
+        "oroltsuulj boloh",
+        "soliltsоj boloh uu",
+        "soliltsoj boloh uu",
+        "solij boloh uu",
     ]
 
     if match_any(strong_keywords, t):
@@ -1792,13 +1837,16 @@ def detect_barter_offer(user_text: str) -> bool:
         "машин өгөөд",
         "машин оролцуулна",
         "машинтай бартер",
+        "mashin ogno",
+        "mashinaa ogno",
+        "mashinaa ogood",
+        "mashin oroltsuulna",
     ]
 
     if match_any(car_keywords, t):
         return True
 
-    # Өөрийн байрны мэдээллийг хэд хэдэн шинжээр өгсөн бол
-    # бартерын санал гэж үзнэ.
+    # Өөрийн байрны мэдээлэл хэд хэдэн шинжээр ирвэл бартер гэж үзнэ.
     property_keywords = [
         "1 өрөө байр",
         "2 өрөө байр",
@@ -1815,6 +1863,23 @@ def detect_barter_offer(user_text: str) -> bool:
         "шинэ байр",
         "хуучин байр",
         "орон сууц",
+        # Romanized
+        "1 oroo bair",
+        "2 oroo bair",
+        "3 oroo bair",
+        "4 oroo bair",
+        "5 oroo bair",
+        "gerchilgee belen",
+        "gerchilgee baina",
+        "gerchilgee bna",
+        "gerchilgee",
+        "davhart",
+        "davhar",
+        "balkontoi",
+        "tagttai",
+        "shine bair",
+        "huuchin bair",
+        "oron suuts",
     ]
 
     property_hits = sum(
@@ -1831,6 +1896,14 @@ def detect_barter_offer(user_text: str) -> bool:
         )
     )
 
+    # Романоор бичсэн талбай: 43.64m2 / 43.64 m2.
+    has_area_latin = bool(
+        re.search(
+            r"(?<![0-9])\d+(?:[.,]\d+)?\s*m\s*2\b",
+            t
+        )
+    )
+
     # 12 давхар, 12 давхарт, 12 давхарын гэх мэт.
     has_floor = bool(
         re.search(
@@ -1839,20 +1912,101 @@ def detect_barter_offer(user_text: str) -> bool:
         )
     )
 
+    has_floor_latin = bool(
+        re.search(
+            r"(?<![0-9])\d+\s*davhar(?:t|iin)?\b",
+            t
+    )
+    )
+
+    has_offer_context = match_any(
+        [
+            "санал болгож",
+            "өгөх хүсэлтэй",
+            "оруулж",
+            "төлбөрт оруулах",
+            "бартер",
+            "sanаl bolgoj",
+            "ogoh huseltei",
+            "oroltsuulj",
+            "tolbort oruulah",
+        ],
+        t
+    )
+
     # Гэрчилгээ + талбай/давхар/тагт гэх мэт.
-    if "гэрчилгээ бэлэн" in t or "гэрчилгээтэй" in t:
-        if has_area or has_floor or "балконтой" in t or "тагттай" in t:
+    if match_any(["гэрчилгээ бэлэн", "гэрчилгээтэй", "гэрчилгээ байна",
+                  "gerchilgee belen", "gerchilgee baina", "gerchilgee bna"], t):
+        if has_area or has_area_latin or has_floor or has_floor_latin or \
+                match_any(["балконтой", "тагттай", "balkontoi", "tagttai"], t):
             return True
 
-    # 2+ байрны шинж тэмдэг.
-    if property_hits >= 2:
+    # Тодорхой өрөөний тоо + талбай/давхар.
+    if property_hits >= 1 and (has_area or has_area_latin or has_floor or has_floor_latin):
         return True
 
-    # "2 өрөө байр ... 43.64м2" зэрэг.
-    if property_hits >= 1 and (has_area or has_floor):
+    # Хоёр ба түүнээс олон байрны шинж тэмдэг + саналын нөхцөл.
+    if property_hits >= 2 and has_offer_context:
         return True
 
     return False
+
+USER_NAME_CACHE: Dict[str, str] = {}
+
+
+def get_messenger_user_name(sender_id: str) -> str:
+    """Messenger хэрэглэгчийн нэрийг Meta Graph API-аас авна."""
+
+    if not sender_id:
+        return "Нэр тодорхойгүй"
+
+    if sender_id in USER_NAME_CACHE:
+        return USER_NAME_CACHE[sender_id]
+
+    if not META_PAGE_ACCESS_TOKEN:
+        return "Нэр тодорхойгүй"
+
+    try:
+        response = requests.get(
+            f"https://graph.facebook.com/v20.0/{quote(sender_id, safe='')}",
+            params={
+                "fields": "name,first_name,last_name",
+                "access_token": META_PAGE_ACCESS_TOKEN
+            },
+            timeout=10
+        )
+
+        if response.ok:
+            data = response.json()
+            name = str(data.get("name") or "").strip()
+
+            if not name:
+                first_name = str(data.get("first_name") or "").strip()
+                last_name = str(data.get("last_name") or "").strip()
+                name = " ".join(
+                    part for part in [first_name, last_name] if part
+                ).strip()
+
+            if name:
+                USER_NAME_CACHE[sender_id] = name
+                return name
+
+        else:
+            print(
+                "⚠️ Messenger хэрэглэгчийн нэр авахад алдаа:",
+                response.status_code,
+                response.text,
+                flush=True
+            )
+
+    except Exception as exc:
+        print(
+            "⚠️ Messenger нэр авахад алдаа:",
+            repr(exc),
+            flush=True
+        )
+
+    return "Нэр тодорхойгүй"
 
 
 def send_barter_telegram(
@@ -1869,9 +2023,12 @@ def send_barter_telegram(
         )
         return False
 
+    user_name = get_messenger_user_name(sender_id)
+
     telegram_text = (
         "🚨 ШИНЭ БАРТЕРЫН САНАЛ ИРЛЭЭ!\n\n"
-        f"Хэрэглэгч: {sender_id}\n"
+        f"👤 Харилцагч: {user_name}\n"
+        f"🆔 Messenger ID: {sender_id}\n\n"
         f"💬 {user_text}"
     )
 
