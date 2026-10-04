@@ -33,6 +33,14 @@ META_PAGE_ACCESS_TOKEN = os.getenv(
     "META_PAGE_ACCESS_TOKEN"
 )
 
+META_GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v26.0")
+# Name lookup-ийг зөвхөн Meta-ийн User Profile/Business Asset эрх тохирсны дараа
+# идэвхжүүлнэ. Буруу эрхтэй үед Telegram notification тасалдахгүй.
+ENABLE_MESSENGER_NAME_LOOKUP = os.getenv(
+    "ENABLE_MESSENGER_NAME_LOOKUP",
+    "false"
+).lower() in {"1", "true", "yes", "y", "on"}
+
 # Энэ мөрийг заавал нэмнэ:
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -1094,8 +1102,8 @@ def messenger_url() -> str:
         return ""
 
     return (
-        "https://graph.facebook.com/v20.0/"
-        "me/messages"
+        "https://graph.facebook.com/"
+        f"{META_GRAPH_VERSION}/me/messages"
         f"?access_token={META_PAGE_ACCESS_TOKEN}"
     )
 
@@ -1955,9 +1963,12 @@ USER_NAME_CACHE: Dict[str, str] = {}
 
 
 def get_messenger_user_name(sender_id: str) -> str:
-    """Messenger хэрэглэгчийн нэрийг Meta Graph API-аас авна."""
+    """Messenger хэрэглэгчийн нэрийг Meta Graph API-аас авахыг оролдоно."""
 
     if not sender_id:
+        return "Нэр тодорхойгүй"
+
+    if not ENABLE_MESSENGER_NAME_LOOKUP:
         return "Нэр тодорхойгүй"
 
     if sender_id in USER_NAME_CACHE:
@@ -1968,9 +1979,9 @@ def get_messenger_user_name(sender_id: str) -> str:
 
     try:
         response = requests.get(
-            f"https://graph.facebook.com/v20.0/{quote(sender_id, safe='')}",
+            f"https://graph.facebook.com/{META_GRAPH_VERSION}/{quote(sender_id, safe='')}",
             params={
-                "fields": "name,first_name,last_name",
+                "fields": "name",
                 "access_token": META_PAGE_ACCESS_TOKEN
             },
             timeout=10
@@ -1980,18 +1991,23 @@ def get_messenger_user_name(sender_id: str) -> str:
             data = response.json()
             name = str(data.get("name") or "").strip()
 
-            if not name:
-                first_name = str(data.get("first_name") or "").strip()
-                last_name = str(data.get("last_name") or "").strip()
-                name = " ".join(
-                    part for part in [first_name, last_name] if part
-                ).strip()
-
             if name:
                 USER_NAME_CACHE[sender_id] = name
                 return name
 
-        else:
+            return "Нэр тодорхойгүй"
+
+        # 400/code 100/subcode 33 үед Telegram notification-ийг таслахгүй.
+        try:
+            error_data = response.json().get("error", {})
+        except Exception:
+            error_data = {}
+
+        if not (
+            response.status_code == 400
+            and error_data.get("code") == 100
+            and error_data.get("error_subcode") == 33
+        ):
             print(
                 "⚠️ Messenger хэрэглэгчийн нэр авахад алдаа:",
                 response.status_code,
@@ -2150,6 +2166,40 @@ def process_ai_response(
         )
 
         # -----------------------------------------------
+        # Follow-up/status questions
+        # -----------------------------------------------
+        # "Хэзээ хариу өгөх вэ?" гэх мэт follow-up асуултыг Groq-д өгөхгүй,
+        # ингэснээр өмнөх бартерын context-ийг бартерын шинэ санал гэж
+        # буруу ойлгох эрсдэлийг арилгана.
+        followup_text = normalize_text(user_text)
+        if (
+            not faq_result
+            and match_any(
+                [
+                    "хэзээ хариу",
+                    "хэзээ холбогдох",
+                    "хэзээ залгах",
+                    "хэр удах",
+                    "хариу хэзээ",
+                    "холбогдох уу",
+                    "hariu hezee",
+                    "hezee hariu",
+                    "hezee holbogdoh",
+                    "hezee zalgah",
+                    "her uдах",
+                    "her udah",
+                ],
+                followup_text
+            )
+        ):
+            faq_result = (
+                "Таны мэдээллийг борлуулалтын менежерт дамжуулсан шүү 😊\n\n"
+                "Менежер таны саналыг шалгаад боломжит хугацаанд эргэн холбогдоно.",
+                False,
+                DEFAULT_BUTTONS
+            )
+
+        # -----------------------------------------------
         # Direct images
         # -----------------------------------------------
 
@@ -2264,11 +2314,13 @@ def process_ai_response(
             user_text
         )
 
-        if is_barter:
-            # Direct detector бариагүй edge case-ийг Groq таньсан
-            # тохиолдолд мөн Telegram-д мэдэгдэнэ.
+        # Groq-ийн is_barter-ийг дангаар нь Telegram trigger болгохгүй.
+        # Зөвхөн шинэ мессежийн deterministic detector баталсан үед л
+        # бартер гэж үзнэ. Ингэснээр "хэзээ хариу өгөх вэ?" зэрэг follow-up
+        # асуулт өмнөх бартерын context-оос болж дахин Telegram руу явахгүй.
+        if is_barter and detect_barter_offer(user_text):
             print(
-                f"🚨 GROQ БАРТЕРЫН САНАЛ! "
+                f"🚨 GROQ + DIRECT БАРТЕРЫН САНАЛ! "
                 f"Хэрэглэгч [{sender_id}]: {user_text}",
                 flush=True
             )
