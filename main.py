@@ -7,6 +7,8 @@ from pathlib import Path
 from urllib.parse import quote
 from typing import Dict, List, Optional, Tuple, Any
 
+
+
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
@@ -24,6 +26,8 @@ VERIFY_TOKEN = os.getenv(
     "VERIFY_TOKEN",
     "miners_villa_secret_123"
 )
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 META_PAGE_ACCESS_TOKEN = os.getenv(
     "META_PAGE_ACCESS_TOKEN"
@@ -723,7 +727,9 @@ def direct_faq_router(
         "хай",
         "bnu",
         "Сайн байна уу?",
-        
+        "сайн байна уу?",
+        "hello?",
+        "сн бну",
         "мэдээлэл авий"
     ]
 
@@ -1866,21 +1872,17 @@ def process_ai_response(
             print(f"🚨 БАРТЕРЫН САНАЛ ИРЛЭЭ! Хэрэглэгч [{sender_id}]: {user_text}", flush=True)
             
             # === ТЕЛЕГРАМ ГРУПП РҮҮ МЕССЕЖ ИЛГЭЭХ ХЭСЭГ ===
-            # ДООРХ ХЭСЭГТ ӨӨРИЙНХӨӨ BOT TOKEN-Г ОРУУЛААРАЙ
-            telegram_token = "8671791093:AAE3O4RIOBm91NeN-je5zPvXwNJKCPDkM-o" 
-            chat_id = "-5540906051"
             telegram_text = f"🚨 ШИНЭ БАРТЕРЫН САНАЛ ИРЛЭЭ!\n\nХэрэглэгчээс ирсэн мессеж:\n💬 {user_text}"
             
             try:
                 requests.post(
-                    f"https://api.telegram.org/bot{telegram_token}/sendMessage",
-                    json={"chat_id": chat_id, "text": telegram_text}
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": TELEGRAM_CHAT_ID, "text": telegram_text}
                 )
             except Exception as e:
                 print(f"⚠️ Telegram руу илгээхэд алдаа гарлаа: {e}")
             # ===============================================
 
-            # Хэрэглэгчийн хариуг автоматаар өөрчилж болно:
             reply = "Таны бартерын саналыг хүлээн авлаа. Та холбоо барих дугаар болон гэрээний дугаараа илгээгээрэй. Борлуулалтын менежер удахгүй холбогдоно."
 
         add_to_history(
@@ -1966,7 +1968,7 @@ async def verify_webhook(request: Request):
     challenge = params.get("hub.challenge", "")
 
     # АНХААР: VERIFY_TOKEN хувьсагчийн оронд шууд "MinersVilla123" гэж бичлээ
-    if mode == "subscribe" and verify_token == "MinersVilla123":
+    if mode == "subscribe" and verify_token == VERIFY_TOKEN:
         print("✅ Meta webhook verified.")
         return Response(content=challenge, media_type="text/plain")
 
