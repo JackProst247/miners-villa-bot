@@ -302,6 +302,10 @@ def normalize_text(text: str) -> str:
 
     text = str(text).lower().strip()
 
+    # м² болон ² тэмдэгтийг 2 болгон хэвийн болгоно.
+    # Ингэснээр "43м²" ба "43м2" ижил танигдана.
+    text = text.replace("²", "2")
+
     # punctuation-ийг space болгоно
     text = re.sub(
         r"[^\w\s.,]",
@@ -760,16 +764,14 @@ def direct_faq_router(
     # 2. Model selection
     # -----------------------------------------------------
 
+    # Зөвхөн загвар сонголт асуусан үед MODEL carousel ажиллана.
+    # "м2", "мкв", "хэмжээ" зэрэг үгсийг энд оруулахгүй.
+    # Учир нь бартерын саналд талбайн мэдээлэл маш түгээмэл ордог.
     model_keywords = [
         "сонголт",
         "загвар",
-        "хэмжээ",
-        "мкв",
-        "м2",
-        "квадрат",
         "songolt",
-        "zagvar",
-        "mkv"
+        "zagvar"
     ]
 
     if match_any(
@@ -1628,10 +1630,17 @@ SYSTEM_PROMPT = f"""
 ТА ЗААВАЛ ДАРААХ JSON ФОРМАТААР ХАРИУЛ:
 {{
   "reply": "Хэрэглэгчдэд өгөх хариу мессеж",
-  "is_barter": true/false (Хэрэглэгч машин, өөр байр, эд зүйл санал болгосон бол true байх)
+  "is_barter": true/false,
+  "image_keys": []
 }}
 
-image_keys нь дараах боломжит утгуудын аль нэг байна:
+ДҮРЭМ:
+- "is_barter" нь хэрэглэгч өөрийн байр, машин, газар,
+  хашаа байшин, өөр үл хөдлөх хөрөнгө эсвэл өөр эд зүйл
+  санал болгосон үед true байна.
+- Бартерын санал байвал "is_barter": true-г заавал тавина.
+- Зураг шаардлагагүй бол "image_keys": [] байна.
+- "image_keys" дотор зөвхөн дараах боломжит утгуудаас сонгоно:
 {", ".join(sorted(IMAGE_KEYS))}
 """
 
@@ -1724,6 +1733,184 @@ def ask_groq(
 
 
 # =========================================================
+# BARTER DETECTOR
+# =========================================================
+
+def detect_barter_offer(user_text: str) -> bool:
+    """
+    Бартерын саналыг FAQ/IMAGE/GROQ-оос өмнө найдвартай танина.
+
+    Жишээ:
+    "Шинэ 2 өрөө байр гэрчилгээ бэлэн 12 давхарт 43.64м2"
+    """
+
+    t = normalize_text(user_text)
+
+    if not t:
+        return False
+
+    # Шууд бартерын утгатай хэллэгүүд.
+    strong_keywords = [
+        "бартер",
+        "бартерт",
+        "байраа өгнө",
+        "байраа оролцуулна",
+        "байраа сольж",
+        "байр өгнө",
+        "байр оролцуулна",
+        "машин өгнө",
+        "машинаа өгнө",
+        "машинаа өгөөд",
+        "машин өгөөд",
+        "машин оролцуулна",
+        "машинтай бартер",
+        "газар өгнө",
+        "газраа өгнө",
+        "газар оролцуулна",
+        "хашаа байшин өгнө",
+        "хашаа байшин оролцуулна",
+        "үл хөдлөх хөрөнгө өгнө",
+        "үл хөдлөх хөрөнгө оролцуулна",
+        "орон сууц өгнө",
+        "орон сууц оролцуулна",
+        "оролцуулж болох уу",
+        "оролцуулж болох",
+        "солилцож болох уу",
+        "солилцож болох",
+        "сольж болох уу",
+        "сольж болох",
+    ]
+
+    if match_any(strong_keywords, t):
+        return True
+
+    # Машины санал.
+    car_keywords = [
+        "машин өгнө",
+        "машинаа өгнө",
+        "машинаа өгөөд",
+        "машин өгөөд",
+        "машин оролцуулна",
+        "машинтай бартер",
+    ]
+
+    if match_any(car_keywords, t):
+        return True
+
+    # Өөрийн байрны мэдээллийг хэд хэдэн шинжээр өгсөн бол
+    # бартерын санал гэж үзнэ.
+    property_keywords = [
+        "1 өрөө байр",
+        "2 өрөө байр",
+        "3 өрөө байр",
+        "4 өрөө байр",
+        "5 өрөө байр",
+        "гэрчилгээ бэлэн",
+        "гэрчилгээтэй",
+        "гэрчилгээ байна",
+        "давхарт",
+        "давхрын",
+        "балконтой",
+        "тагттай",
+        "шинэ байр",
+        "хуучин байр",
+        "орон сууц",
+    ]
+
+    property_hits = sum(
+        1
+        for keyword in property_keywords
+        if normalize_text(keyword) in t
+    )
+
+    # 43.64м2, 43.64 м2, 43м2, 43 м2 гэх мэт.
+    has_area = bool(
+        re.search(
+            r"(?<![0-9])\d+(?:[.,]\d+)?\s*(?:м2|м\s*2)\b",
+            t
+        )
+    )
+
+    # 12 давхар, 12 давхарт, 12 давхарын гэх мэт.
+    has_floor = bool(
+        re.search(
+            r"(?<![0-9])\d+\s*давхар(?:т|ын)?\b",
+            t
+        )
+    )
+
+    # Гэрчилгээ + талбай/давхар/тагт гэх мэт.
+    if "гэрчилгээ бэлэн" in t or "гэрчилгээтэй" in t:
+        if has_area or has_floor or "балконтой" in t or "тагттай" in t:
+            return True
+
+    # 2+ байрны шинж тэмдэг.
+    if property_hits >= 2:
+        return True
+
+    # "2 өрөө байр ... 43.64м2" зэрэг.
+    if property_hits >= 1 and (has_area or has_floor):
+        return True
+
+    return False
+
+
+def send_barter_telegram(
+    sender_id: str,
+    user_text: str
+) -> bool:
+    """Бартерын саналыг Telegram админ группт илгээнэ."""
+
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(
+            "⚠️ Telegram тохиргоо дутуу байна: "
+            "TELEGRAM_BOT_TOKEN эсвэл TELEGRAM_CHAT_ID байхгүй.",
+            flush=True
+        )
+        return False
+
+    telegram_text = (
+        "🚨 ШИНЭ БАРТЕРЫН САНАЛ ИРЛЭЭ!\n\n"
+        f"Хэрэглэгч: {sender_id}\n"
+        f"💬 {user_text}"
+    )
+
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot"
+            f"{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": telegram_text
+            },
+            timeout=15
+        )
+
+        if not response.ok:
+            print(
+                "⚠️ Telegram API алдаа:",
+                response.status_code,
+                response.text,
+                flush=True
+            )
+            return False
+
+        print(
+            "✅ Бартерын санал Telegram руу илгээгдлээ.",
+            flush=True
+        )
+        return True
+
+    except Exception as exc:
+        print(
+            "⚠️ Telegram руу илгээхэд алдаа:",
+            repr(exc),
+            flush=True
+        )
+        return False
+
+
+# =========================================================
 # RESPONSE PROCESSOR
 # =========================================================
 
@@ -1745,6 +1932,56 @@ def process_ai_response(
             f"📩 USER [{sender_id}]: "
             f"{user_text}"
         )
+
+        # -----------------------------------------------
+        # BARTER — хамгийн түрүүнд шалгана
+        # -----------------------------------------------
+        # Бартерын санал нь FAQ, IMAGE, MODEL, GROQ-оос
+        # өмнө шийдэгдэнэ.
+        if detect_barter_offer(user_text):
+
+            print(
+                f"🚨 DIRECT БАРТЕРЫН САНАЛ! "
+                f"Хэрэглэгч [{sender_id}]: {user_text}",
+                flush=True
+            )
+
+            send_barter_telegram(
+                sender_id,
+                user_text
+            )
+
+            reply = (
+                "Таны бартерын саналыг хүлээн авлаа 😊\n\n"
+                "Борлуулалтын менежер таны мэдээллийг шалгаад "
+                "удахгүй холбогдоно."
+            )
+
+            add_to_history(
+                sender_id,
+                "user",
+                user_text
+            )
+
+            add_to_history(
+                sender_id,
+                "assistant",
+                reply
+            )
+
+            send_fb_message(
+                sender_id,
+                reply,
+                DEFAULT_BUTTONS
+            )
+
+            print(
+                f"📤 BOT [{sender_id}]: "
+                f"{reply}",
+                flush=True
+            )
+
+            return
 
         # -----------------------------------------------
         # Direct FAQ
@@ -1871,22 +2108,24 @@ def process_ai_response(
         )
 
         if is_barter:
-            # Админд илгээх дохио (Терминал дээр улаанаар анхааруулж гарна)
-            print(f"🚨 БАРТЕРЫН САНАЛ ИРЛЭЭ! Хэрэглэгч [{sender_id}]: {user_text}", flush=True)
-            
-            # === ТЕЛЕГРАМ ГРУПП РҮҮ МЕССЕЖ ИЛГЭЭХ ХЭСЭГ ===
-            telegram_text = f"🚨 ШИНЭ БАРТЕРЫН САНАЛ ИРЛЭЭ!\n\nХэрэглэгчээс ирсэн мессеж:\n💬 {user_text}"
-            
-            try:
-                requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                    json={"chat_id": TELEGRAM_CHAT_ID, "text": telegram_text}
-                )
-            except Exception as e:
-                print(f"⚠️ Telegram руу илгээхэд алдаа гарлаа: {e}")
-            # ===============================================
+            # Direct detector бариагүй edge case-ийг Groq таньсан
+            # тохиолдолд мөн Telegram-д мэдэгдэнэ.
+            print(
+                f"🚨 GROQ БАРТЕРЫН САНАЛ! "
+                f"Хэрэглэгч [{sender_id}]: {user_text}",
+                flush=True
+            )
 
-            reply = "Таны бартерын саналыг хүлээн авлаа. Та холбоо барих дугаар болон гэрээний дугаараа илгээгээрэй. Борлуулалтын менежер удахгүй холбогдоно."
+            send_barter_telegram(
+                sender_id,
+                user_text
+            )
+
+            reply = (
+                "Таны бартерын саналыг хүлээн авлаа 😊\n\n"
+                "Борлуулалтын менежер таны мэдээллийг шалгаад "
+                "удахгүй холбогдоно."
+            )
 
         add_to_history(
             sender_id,
