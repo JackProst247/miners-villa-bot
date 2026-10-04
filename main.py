@@ -810,26 +810,18 @@ def direct_faq_router(
     # 4. Location
     # -----------------------------------------------------
 
-  # 1. match_any функц кодын өөр нэг хэсэгт (ерөнхийдөө файлаа эхлэх үед эсвэл функцийн гадна) ганцаараа байх ёстой:
-def match_any(keywords, text):
-    cleaned_text = text.lower().strip()
-    return any(kw.lower() in cleaned_text for kw in keywords)
-
-
-# 2. Харин таны бичсэн байршил шалгах хэсэг яг ийм байдлаар байх ёстой:
-location_keywords = [
-    "байршил", "хаана байдаг", "хаана вэ", "bairshil", "haana", "байршил сургууль", "Bairshil"
-]
-
-if match_any(location_keywords, t):
-    reply = (
-        f"📍 Байршил: {LOCATION_TEXT}\n\n"
-        "🏫 Сургууль, цэцэрлэг: Төслийн зүүн буланд 640 хүүхдийн улсын сургууль, "
-        "280 хүүхдийн улсын цэцэрлэг баригдаж байгаа ба 2028 онд ашиглалтад орно.\n\n"
-        f"☎️ Дэлгэрэнгүй: {SALES_PHONE}"
-    )
-    return (reply, False, DEFAULT_BUTTONS)
-
+    location_keywords = [
+        "байршил", "хаана байдаг", "хаана вэ", "bairshil", "haana", "байршил сургууль", "Bairshil"
+    ]
+    if match_any(location_keywords, t):
+        reply = (
+            f"📍 Байршил: {LOCATION_TEXT}\n\n"
+            "🏫 Сургууль, цэцэрлэг: Төслийн зүүн буланд 640 хүүхдийн улсын сургууль, "
+            "280 хүүхдийн улсын цэцэрлэг баригдаж байгаа ба 2028 онд ашиглалтад орно.\n\n"
+            f"☎️ Дэлгэрэнгүй: {SALES_PHONE}"
+        )
+        return (reply, False, DEFAULT_BUTTONS)
+    
     # -----------------------------------------------------
     # 5. Phone
     # -----------------------------------------------------
