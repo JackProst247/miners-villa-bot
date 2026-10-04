@@ -2083,6 +2083,131 @@ def send_barter_telegram(
         return False
 
 
+
+# =========================================================
+# DIRECT AREA PRICE ROUTER
+# =========================================================
+
+def direct_area_price_router(
+    user_text: str,
+    sender_id: str = ""
+) -> Optional[Tuple[str, Any, Optional[List[Dict]]]]:
+    """Талбай + үнэ асуусан мессежийг зурагнаас өмнө шууд бодож хариулна."""
+
+    t = normalize_text(user_text)
+
+    if not t:
+        return None
+
+    # 198 м² / 198м2 / 198мкв / 198 мкв / 198m2 гэх мэт талбайг танина.
+    area_match = re.search(
+        r"(?<![0-9])\d+(?:[.,]\d+)?\s*(?:м2|мкв|m\s*2|mkv)\b",
+        t
+    )
+
+    if not area_match:
+        return None
+
+    # Зөвхөн талбай бичсэн мессежийг үнэ гэж автоматаар үзэхгүй.
+    # "хэд болох", "үнэ", "орчим", "тооц", "hed", "boloh" гэх мэт асуултын хэллэг хэрэгтэй.
+    price_question_keywords = [
+        "үнэ",
+        "үнийн",
+        "хэд болох",
+        "хэд орчим",
+        "хэд вэ",
+        "болох вэ",
+        "нийт хэд",
+        "тооцоол",
+        "тооцох",
+        "тооцвол",
+        "үнэлгээ",
+        "une",
+        "vne",
+        "hed",
+        "boloh",
+        "orjim",
+        "orchoom",
+        "toos",
+        "tootsool",
+        "tootsvol",
+    ]
+
+    if not match_any(price_question_keywords, t):
+        return None
+
+    raw_area = area_match.group(0)
+    number_match = re.search(r"\d+(?:[.,]\d+)?", raw_area)
+    if not number_match:
+        return None
+
+    try:
+        area = float(number_match.group(0).replace(",", "."))
+    except ValueError:
+        return None
+
+    if area <= 0 or area > 1000:
+        return None
+
+    # Төслийн баталгаатай мэдээлэл:
+    # 136.42 м² хүртэлх Multi House: 5.8 сая ₮/м²
+    # 136.42 м²-ээс дээш: 5.5 сая ₮/м²
+    # Хэрэглэгч Multi House гэж тодорхойлсон бол яг энэ дүрмийг хэрэглэнэ.
+    is_multi = match_any(
+        [
+            "мульт",
+            "мульт хаус",
+            "мультхаус",
+            "mult",
+        ],
+        t
+    )
+
+    if is_multi:
+        price_per_m2 = 5_800_000 if area <= 136.42 else 5_500_000
+        total = area * price_per_m2
+
+        reply = (
+            f"🏢 {area:,.2f} м² Мульт хаусыг одоогийн м² үнээр "
+            f"ойролцоогоор {total:,.0f} ₮ гэж тооцно.\n\n"
+            f"М² үнэ: {price_per_m2:,.0f} ₮. "
+            "Эцсийн үнэ нь тухайн сонголтын нөхцөлөөс шалтгаалж баталгаажна."
+        )
+        return (reply, False, MODEL_BUTTONS)
+
+    # Таун болон загвар тодорхойгүй үед яг нэг м² үнэ зохиохгүй.
+    # Харин одоогийн баталгаатай хүрээгээр ойролцоолно.
+    if match_any(
+        [
+            "таун",
+            "таун хаус",
+            "таунхаус",
+            "townhouse",
+        ],
+        t
+    ):
+        min_total = area * PRICE_MIN
+        max_total = area * PRICE_MAX
+
+        reply = (
+            f"🏡 {area:,.2f} м² Таун хаус нь одоогийн м² үнийн хүрээгээр "
+            f"ойролцоогоор {min_total:,.0f}–{max_total:,.0f} ₮ байна.\n\n"
+            f"Одоогийн м² үнэ {PRICE_MIN:,.0f}–{PRICE_MAX:,.0f} ₮. "
+            f"Эцсийн үнийг борлуулалтын менежер баталгаажуулна."
+        )
+        return (reply, False, MODEL_BUTTONS)
+
+    # "198 м² хэд вэ?" гэх мэт загвар нь тодорхойгүй үед хүрээгээр бодно.
+    min_total = area * PRICE_MIN
+    max_total = area * PRICE_MAX
+
+    reply = (
+        f"🏠 {area:,.2f} м² талбайг одоогийн м² үнийн хүрээгээр "
+        f"ойролцоогоор {min_total:,.0f}–{max_total:,.0f} ₮ гэж тооцож болно.\n\n"
+        f"Одоогийн м² үнэ {PRICE_MIN:,.0f}–{PRICE_MAX:,.0f} ₮."
+    )
+    return (reply, False, MODEL_BUTTONS)
+
 # =========================================================
 # RESPONSE PROCESSOR
 # =========================================================
@@ -2151,6 +2276,45 @@ def process_ai_response(
             print(
                 f"📤 BOT [{sender_id}]: "
                 f"{reply}",
+                flush=True
+            )
+
+            return
+
+        # -----------------------------------------------
+        # Direct area-price calculation
+        # -----------------------------------------------
+        # "198 мкв хэд орчим болох вэ?" гэх мэт үнэ асуултыг
+        # зурагны router-оос өмнө шууд бодно.
+        area_price_result = direct_area_price_router(
+            user_text,
+            sender_id
+        )
+
+        if area_price_result:
+
+            reply, show_carousel, custom_buttons = area_price_result
+
+            add_to_history(
+                sender_id,
+                "user",
+                user_text
+            )
+
+            add_to_history(
+                sender_id,
+                "assistant",
+                reply
+            )
+
+            send_fb_message(
+                sender_id,
+                reply,
+                custom_buttons or DEFAULT_BUTTONS
+            )
+
+            print(
+                f"📤 BOT [{sender_id}]: {reply}",
                 flush=True
             )
 
