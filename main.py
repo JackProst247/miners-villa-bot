@@ -1196,7 +1196,7 @@ def send_carousel_menu(
     # Зургуудын URL
     card1_url = f"{PUBLIC_BASE_URL}/photo/general.png?v=3"
     card2_url = f"{PUBLIC_BASE_URL}/photo/townhouse_266.png?v=1" 
-    card3_url = f"{PUBLIC_BASE_URL}/photo/general_plan.png"
+    card3_url = f"{PUBLIC_BASE_URL}/photo/general_plan.png?v=1"
 
     payload = {
         "recipient": {
