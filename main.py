@@ -744,10 +744,7 @@ def direct_faq_router(
 }
 
 
-    if (
-        match_any(greetings, t)
-        and len(t.split()) <= 5
-    ):
+    if t in greetings:
 
         reply = (
             "Сайн байна уу? 😊\n\n"
@@ -1195,7 +1192,7 @@ def send_carousel_menu(
     # Зургуудын URL
     card1_url = f"{PUBLIC_BASE_URL}/photo/general.png?v=3"
     card2_url = f"{PUBLIC_BASE_URL}/photo/townhouse_266.png?v=1" 
-    card3_url = f"{PUBLIC_BASE_URL}/photo/general_plan.png?v=1"
+    card3_url = f"{PUBLIC_BASE_URL}/photo/general_plan.png?v=4"
 
     payload = {
         "recipient": {
