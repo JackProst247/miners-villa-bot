@@ -2661,7 +2661,7 @@ async def handle_webhook(
 
                 user_text = ""
 
-                # -----------------------------------------
+                                # -----------------------------------------
                 # Message
                 # -----------------------------------------
 
@@ -2674,42 +2674,56 @@ async def handle_webhook(
                 ):
 
                     # Quick reply
-if "quick_reply" in message:
+                    if "quick_reply" in message:
 
-    raw_payload = (
-        message
-        .get(
-            "quick_reply",
-            {}
-        )
-        .get(
-            "payload",
-            ""
-        )
-        .strip()
-    )
+                        quick_reply = (
+                            message
+                            .get("quick_reply", {})
+                            or {}
+                        )
 
-    # Messenger conversation starter-ийн дотоод
-    # CS:... кодыг хэрэглэгчийн мессеж гэж үзэхгүй.
-    if raw_payload.startswith("CS:"):
-        user_text = "сайн байна уу"
+                        raw_payload = (
+                            quick_reply
+                            .get("payload", "")
+                            .strip()
+                        )
 
-    else:
-        user_text = (
-            PAYLOAD_MAP.get(
-                raw_payload,
-                raw_payload
-            )
-        )
+                        # Conversation starter / icebreaker
+                        # payload "CS:..." байвал дотоод кодыг
+                        # хэрэглэгчийн текст болгон дамжуулахгүй.
+                        visible_text = (
+                            message
+                            .get("text", "")
+                            .strip()
+                        )
 
-                # Normal text
-                elif "text" in message:
-                user_text = message.get("text", "").strip()
+                        if (
+                            raw_payload.startswith("CS:")
+                            and visible_text
+                        ):
+                            user_text = visible_text
+                        else:
+                            user_text = (
+                                PAYLOAD_MAP.get(
+                                    raw_payload,
+                                    visible_text or raw_payload
+                                )
+                            )
 
-                # Зураг, стикер (Like товч) зэрэг attachment ирсэн үед
-                elif "attachments" in message:
-                # Системд "сайн уу" гэж бичсэнтэй ижилхэнээр ойлгуулж, үндсэн цэсийг дуудах
-                user_text = "сайн уу"
+                    # Normal text
+                    elif "text" in message:
+
+                        user_text = (
+                            message
+                            .get("text", "")
+                            .strip()
+                        )
+
+                    # Зураг, sticker, like гэх мэт attachment
+                    elif "attachments" in message:
+
+                        user_text = "сайн уу"
+
 
                 # -----------------------------------------
                 # Postback
@@ -2717,26 +2731,38 @@ if "quick_reply" in message:
 
                 elif postback:
 
-    raw_payload = (
-        postback
-        .get(
-            "payload",
-            ""
-        )
-        .strip()
-    )
+                    raw_payload = (
+                        postback
+                        .get(
+                            "payload",
+                            ""
+                        )
+                        .strip()
+                    )
 
-    # Conversation starter-ийн дотоод CS:... payload
-    if raw_payload.startswith("CS:"):
-        user_text = "сайн байна уу"
+                    postback_title = (
+                        postback
+                        .get(
+                            "title",
+                            ""
+                        )
+                        .strip()
+                    )
 
-    else:
-        user_text = (
-            PAYLOAD_MAP.get(
-                raw_payload,
-                raw_payload
-            )
-        )
+                    if (
+                        raw_payload.startswith("CS:")
+                        and postback_title
+                    ):
+                        user_text = postback_title
+
+                    else:
+                        user_text = (
+                            PAYLOAD_MAP.get(
+                                raw_payload,
+                                postback_title or raw_payload
+                            )
+                        )
+
 
                 # -----------------------------------------
                 # Process
@@ -2752,26 +2778,6 @@ if "quick_reply" in message:
                         sender_id,
                         user_text
                     )
-
-        return Response(
-            content="EVENT_RECEIVED",
-            status_code=200
-        )
-
-    except Exception as exc:
-
-        print(
-            "❌ Webhook processing error:",
-            repr(exc)
-        )
-
-        # Meta-д 200 буцаах нь webhook retry
-        # үүсэхээс сэргийлнэ.
-        return Response(
-            content="EVENT_RECEIVED",
-            status_code=200
-        )
-
 
 # =========================================================
 # HEALTH CHECK
