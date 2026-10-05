@@ -742,6 +742,7 @@ def direct_faq_router(
         "сайн байна уу?",
         "hello?",
         "сн бну",
+        "CS:288:9IUILJDY"
         "мэдээлэл авий"
     ]
 
@@ -2673,36 +2674,42 @@ async def handle_webhook(
                 ):
 
                     # Quick reply
-                    if "quick_reply" in message:
+if "quick_reply" in message:
 
-                        raw_payload = (
-                            message
-                            .get(
-                                "quick_reply",
-                                {}
-                            )
-                            .get(
-                                "payload",
-                                ""
-                            )
-                            .strip()
-                        )
+    raw_payload = (
+        message
+        .get(
+            "quick_reply",
+            {}
+        )
+        .get(
+            "payload",
+            ""
+        )
+        .strip()
+    )
 
-                        user_text = (
-                            PAYLOAD_MAP.get(
-                                raw_payload,
-                                raw_payload
-                            )
-                        )
+    # Messenger conversation starter-ийн дотоод
+    # CS:... кодыг хэрэглэгчийн мессеж гэж үзэхгүй.
+    if raw_payload.startswith("CS:"):
+        user_text = "сайн байна уу"
 
-                    # Normal text
-                    elif "text" in message:
-                        user_text = message.get("text", "").strip()
+    else:
+        user_text = (
+            PAYLOAD_MAP.get(
+                raw_payload,
+                raw_payload
+            )
+        )
 
-                    # Зураг, стикер (Like товч) зэрэг attachment ирсэн үед
-                    elif "attachments" in message:
-                        # Системд "сайн уу" гэж бичсэнтэй ижилхэнээр ойлгуулж, үндсэн цэсийг дуудах
-                        user_text = "сайн уу"
+                # Normal text
+                elif "text" in message:
+                user_text = message.get("text", "").strip()
+
+                # Зураг, стикер (Like товч) зэрэг attachment ирсэн үед
+                elif "attachments" in message:
+                # Системд "сайн уу" гэж бичсэнтэй ижилхэнээр ойлгуулж, үндсэн цэсийг дуудах
+                user_text = "сайн уу"
 
                 # -----------------------------------------
                 # Postback
@@ -2710,21 +2717,26 @@ async def handle_webhook(
 
                 elif postback:
 
-                    raw_payload = (
-                        postback
-                        .get(
-                            "payload",
-                            ""
-                        )
-                        .strip()
-                    )
+    raw_payload = (
+        postback
+        .get(
+            "payload",
+            ""
+        )
+        .strip()
+    )
 
-                    user_text = (
-                        PAYLOAD_MAP.get(
-                            raw_payload,
-                            raw_payload
-                        )
-                    )
+    # Conversation starter-ийн дотоод CS:... payload
+    if raw_payload.startswith("CS:"):
+        user_text = "сайн байна уу"
+
+    else:
+        user_text = (
+            PAYLOAD_MAP.get(
+                raw_payload,
+                raw_payload
+            )
+        )
 
                 # -----------------------------------------
                 # Process
