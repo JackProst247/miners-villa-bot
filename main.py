@@ -2779,6 +2779,25 @@ async def handle_webhook(
                         user_text
                     )
 
+        return Response(
+            content="EVENT_RECEIVED",
+            status_code=200
+        )
+
+    except Exception as exc:
+
+        print(
+            "❌ Webhook processing error:",
+            repr(exc)
+        )
+
+        # Meta-д 200 буцаах нь webhook retry
+        # үүсэхээс сэргийлнэ.
+        return Response(
+            content="EVENT_RECEIVED",
+            status_code=200
+        )
+
 # =========================================================
 # HEALTH CHECK
 # =========================================================
