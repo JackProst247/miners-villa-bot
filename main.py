@@ -2760,6 +2760,12 @@ async def handle_webhook(
                         or "админтай холбогдох" in message_text
                         or "админтай ярья" in message_text
                         or "менежертэй холбогдох" in message_text
+                        or "huntei holbogdoh" in message_text
+                        or "ajiltantai holbogdoh" in message_text
+                        or "ajiltan" in message_text
+                        or "admintai holbogdoh" in message_text
+                        or "managertei holbogdoh" in message_text
+                        or "admin" in message_text
                     ):
                         human_mode_users[sender_id] = time.time()
 
