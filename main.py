@@ -2026,6 +2026,65 @@ def get_messenger_user_name(sender_id: str) -> str:
     return "Нэр тодорхойгүй"
 
 
+def send_human_mode_telegram(
+    sender_id: str,
+    user_text: str
+) -> bool:
+    """Ажилтантай холбогдох хүсэлтийг Telegram админ чатад илгээнэ."""
+
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(
+            "⚠️ Telegram тохиргоо дутуу байна: "
+            "TELEGRAM_BOT_TOKEN эсвэл TELEGRAM_CHAT_ID байхгүй.",
+            flush=True
+        )
+        return False
+
+    user_name = get_messenger_user_name(sender_id)
+
+    telegram_text = (
+        "👤 АЖИЛТАНТАЙ ХОЛБОГДОХ ХҮСЭЛТ ИРЛЭЭ!\n\n"
+        f"👤 Харилцагч: {user_name}\n"
+        f"🆔 Messenger ID: {sender_id}\n"
+        f"💬 Хүсэлт: {user_text}\n\n"
+        "⚠️ Харилцагчийг ажилтанд шилжүүлсэн. Bot түр зогссон."
+    )
+
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot"
+            f"{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": telegram_text
+            },
+            timeout=15
+        )
+
+        if not response.ok:
+            print(
+                "⚠️ Human Mode Telegram API алдаа:",
+                response.status_code,
+                response.text,
+                flush=True
+            )
+            return False
+
+        print(
+            "✅ Ажилтантай холбогдох хүсэлт Telegram руу илгээгдлээ.",
+            flush=True
+        )
+        return True
+
+    except Exception as exc:
+        print(
+            "⚠️ Human Mode Telegram руу илгээхэд алдаа:",
+            repr(exc),
+            flush=True
+        )
+        return False
+
+
 def send_barter_telegram(
     sender_id: str,
     user_text: str
@@ -2608,10 +2667,16 @@ async def handle_webhook(
         data = await request.json()
     except Exception as exc:
         print("❌ Invalid JSON:", repr(exc))
-        return Response(content="INVALID_JSON", status_code=400)
+        return Response(
+            content="INVALID_JSON",
+            status_code=400
+        )
 
     if data.get("object") != "page":
-        return Response(content="NOT_A_PAGE_EVENT", status_code=404)
+        return Response(
+            content="NOT_A_PAGE_EVENT",
+            status_code=404
+        )
 
     try:
         for entry in data.get("entry", []):
@@ -2629,47 +2694,60 @@ async def handle_webhook(
                 message = messaging_event.get("message")
 
                 # =========================================
-                # HUMAN MODE - ECHO
+                # HUMAN MODE - EMPLOYEE ECHO
                 # =========================================
-                # Ажилтны Messenger-ээр илгээсэн мессеж Echo
-                # хэлбэрээр буцаж ирнэ. AI руу дахин дамжуулахгүй.
                 if message and message.get("is_echo", False):
                     message_text = (
-                        message.get("text", "")
+                        message
+                        .get("text", "")
                         .strip()
                         .lower()
                     )
 
+                    # Page/employee-ээс customer руу явсан Echo event-ийн
+                    # recipient нь тухайн customer-ийн PSID байна.
                     recipient_id = (
                         messaging_event
                         .get("recipient", {})
                         .get("id")
                     )
 
-                    # Ажилтан яриаг дуусгавал bot дахин ажиллана.
+                    # Ажилтан яриаг дуусгавал Human Mode OFF.
                     if recipient_id and (
                         "баяртай" in message_text
                         or "баярлалаа" in message_text
                     ):
                         if recipient_id in human_mode_users:
                             del human_mode_users[recipient_id]
+
+                            send_fb_message(
+                                recipient_id,
+                                "Ажилтан чатнаас гарлаа. Танд баярлалаа. 😊\n\n"
+                                "Хэрэв танд дахин мэдээлэл хэрэгтэй бол эндээс асуугаарай."
+                            )
+
                             print(
-                                f"[HUMAN MODE OFF] {recipient_id} "
-                                "хэрэглэгч дээр bot сэргэлээ.",
+                                f"[HUMAN MODE OFF] {recipient_id} - "
+                                f"ажилтан чатнаас гарлаа. Bot дахин аслаа.",
                                 flush=True
                             )
 
+                    # Echo-г bot AI руу хэзээ ч дамжуулахгүй.
                     continue
 
                 postback = messaging_event.get("postback")
                 user_text = ""
 
                 # -----------------------------------------
-                # Message
+                # CUSTOMER MESSAGE
                 # -----------------------------------------
-                if message:
+                if (
+                    message
+                    and not message.get("is_echo", False)
+                ):
                     message_text = (
-                        message.get("text", "")
+                        message
+                        .get("text", "")
                         .strip()
                         .lower()
                     )
@@ -2684,11 +2762,26 @@ async def handle_webhook(
                         or "менежертэй холбогдох" in message_text
                     ):
                         human_mode_users[sender_id] = time.time()
+
+                        # Telegram админ чатад ажилтантай холбогдох хүсэлт мэдэгдэнэ.
+                        send_human_mode_telegram(
+                            sender_id,
+                            message.get("text", "").strip()
+                        )
+
+                        send_fb_message(
+                            sender_id,
+                            "Таныг ажилтанд шилжүүллээ. 👤\n\n"
+                            "Та асуултаа асуун түр хүлээнэ үү. "
+                            "Манай ажилтан удахгүй тантай холбогдоно. 😊"
+                        )
+
                         print(
                             f"[HUMAN MODE ON] {sender_id} - "
-                            "Бот зогслоо. Timeout: 2 цаг.",
+                            f"Бот зогслоо. Timeout: 2 цаг.",
                             flush=True
                         )
+
                         continue
 
                     # =========================================
@@ -2698,40 +2791,53 @@ async def handle_webhook(
                         human_mode_started = human_mode_users[sender_id]
                         elapsed = time.time() - human_mode_started
 
+                        # 2 цаг болоогүй бол bot хариу өгөхгүй.
                         if elapsed < HUMAN_MODE_TIMEOUT:
                             remaining_minutes = int(
                                 (HUMAN_MODE_TIMEOUT - elapsed) / 60
                             )
+
                             print(
-                                f"[SKIP] {sender_id} ажилтантай "
-                                f"харилцаж байна. Үлдсэн хугацаа: "
-                                f"{remaining_minutes} минут.",
+                                f"[SKIP] {sender_id} ажилтантай харилцаж байна. "
+                                f"Үлдсэн хугацаа: {remaining_minutes} минут.",
                                 flush=True
                             )
+
                             continue
 
+                        # 2 цаг болсон бол bot автоматаар сэргэнэ.
                         del human_mode_users[sender_id]
+
                         print(
                             f"[HUMAN MODE TIMEOUT] {sender_id} - "
-                            "2 цаг өнгөрсөн. Bot автоматаар сэргэлээ.",
+                            f"2 цаг өнгөрсөн. Bot автоматаар сэргэлээ.",
                             flush=True
                         )
 
                     # Quick reply
                     if "quick_reply" in message:
-                        quick_reply = message.get("quick_reply", {}) or {}
+                        quick_reply = (
+                            message
+                            .get("quick_reply", {})
+                            or {}
+                        )
 
                         raw_payload = (
-                            quick_reply.get("payload", "")
+                            quick_reply
+                            .get("payload", "")
                             .strip()
                         )
 
                         visible_text = (
-                            message.get("text", "")
+                            message
+                            .get("text", "")
                             .strip()
                         )
 
-                        if raw_payload.startswith("CS:") and visible_text:
+                        if (
+                            raw_payload.startswith("CS:")
+                            and visible_text
+                        ):
                             user_text = visible_text
                         else:
                             user_text = PAYLOAD_MAP.get(
@@ -2741,27 +2847,36 @@ async def handle_webhook(
 
                     # Normal text
                     elif "text" in message:
-                        user_text = message.get("text", "").strip()
+                        user_text = (
+                            message
+                            .get("text", "")
+                            .strip()
+                        )
 
                     # Зураг, sticker, like гэх мэт attachment
                     elif "attachments" in message:
                         user_text = "сайн уу"
 
                 # -----------------------------------------
-                # Postback
+                # POSTBACK
                 # -----------------------------------------
                 elif postback:
                     raw_payload = (
-                        postback.get("payload", "")
+                        postback
+                        .get("payload", "")
                         .strip()
                     )
 
                     postback_title = (
-                        postback.get("title", "")
+                        postback
+                        .get("title", "")
                         .strip()
                     )
 
-                    if raw_payload.startswith("CS:") and postback_title:
+                    if (
+                        raw_payload.startswith("CS:")
+                        and postback_title
+                    ):
                         user_text = postback_title
                     else:
                         user_text = PAYLOAD_MAP.get(
@@ -2770,7 +2885,7 @@ async def handle_webhook(
                         )
 
                 # -----------------------------------------
-                # Process
+                # PROCESS CUSTOMER MESSAGE
                 # -----------------------------------------
                 if sender_id and user_text:
                     background_tasks.add_task(
@@ -2795,9 +2910,6 @@ async def handle_webhook(
             content="EVENT_RECEIVED",
             status_code=200
         )
-
-# HEALTH CHECK
-# =========================================================
 
 @app.get("/")
 async def root():
