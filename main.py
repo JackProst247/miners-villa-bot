@@ -1957,6 +1957,11 @@ def detect_barter_offer(user_text: str) -> bool:
 
 USER_NAME_CACHE: Dict[str, str] = {}
 
+# Human Mode-д орсон хэрэглэгчийн сүүлд идэвхжсэн цаг
+human_mode_users: Dict[str, float] = {}
+
+# Ажилтан хариуцах горим дээд тал нь 2 цаг үргэлжилнэ
+HUMAN_MODE_TIMEOUT = 2 * 60 * 60
 
 def get_messenger_user_name(sender_id: str) -> str:
     """Messenger хэрэглэгчийн нэрийг Meta Graph API-аас авахыг оролдоно."""
@@ -2599,41 +2604,18 @@ async def handle_webhook(
     request: Request,
     background_tasks: BackgroundTasks
 ):
-
     try:
-
         data = await request.json()
-
     except Exception as exc:
-
-        print(
-            "❌ Invalid JSON:",
-            repr(exc)
-        )
-
-        return Response(
-            content="INVALID_JSON",
-            status_code=400
-        )
+        print("❌ Invalid JSON:", repr(exc))
+        return Response(content="INVALID_JSON", status_code=400)
 
     if data.get("object") != "page":
-
-        return Response(
-            content="NOT_A_PAGE_EVENT",
-            status_code=404
-        )
+        return Response(content="NOT_A_PAGE_EVENT", status_code=404)
 
     try:
-
-        for entry in data.get(
-            "entry",
-            []
-        ):
-
-            for messaging_event in entry.get(
-                "messaging",
-                []
-            ):
+        for entry in data.get("entry", []):
+            for messaging_event in entry.get("messaging", []):
 
                 sender_id = (
                     messaging_event
@@ -2644,130 +2626,153 @@ async def handle_webhook(
                 if not sender_id:
                     continue
 
-                message = (
-                    messaging_event
-                    .get("message")
-                )
+                message = messaging_event.get("message")
 
-                postback = (
-                    messaging_event
-                    .get("postback")
-                )
+                # =========================================
+                # HUMAN MODE - ECHO
+                # =========================================
+                # Ажилтны Messenger-ээр илгээсэн мессеж Echo
+                # хэлбэрээр буцаж ирнэ. AI руу дахин дамжуулахгүй.
+                if message and message.get("is_echo", False):
+                    message_text = (
+                        message.get("text", "")
+                        .strip()
+                        .lower()
+                    )
 
+                    recipient_id = (
+                        messaging_event
+                        .get("recipient", {})
+                        .get("id")
+                    )
+
+                    # Ажилтан яриаг дуусгавал bot дахин ажиллана.
+                    if recipient_id and (
+                        "баяртай" in message_text
+                        or "баярлалаа" in message_text
+                    ):
+                        if recipient_id in human_mode_users:
+                            del human_mode_users[recipient_id]
+                            print(
+                                f"[HUMAN MODE OFF] {recipient_id} "
+                                "хэрэглэгч дээр bot сэргэлээ.",
+                                flush=True
+                            )
+
+                    continue
+
+                postback = messaging_event.get("postback")
                 user_text = ""
 
-                                # -----------------------------------------
+                # -----------------------------------------
                 # Message
                 # -----------------------------------------
-
-                if (
-                    message
-                    and not message.get(
-                        "is_echo",
-                        False
+                if message:
+                    message_text = (
+                        message.get("text", "")
+                        .strip()
+                        .lower()
                     )
-                ):
+
+                    # =========================================
+                    # HUMAN MODE ON
+                    # =========================================
+                    if (
+                        "ажилтантай холбогдох" in message_text
+                        or "админтай холбогдох" in message_text
+                        or "админтай ярья" in message_text
+                        or "менежертэй холбогдох" in message_text
+                    ):
+                        human_mode_users[sender_id] = time.time()
+                        print(
+                            f"[HUMAN MODE ON] {sender_id} - "
+                            "Бот зогслоо. Timeout: 2 цаг.",
+                            flush=True
+                        )
+                        continue
+
+                    # =========================================
+                    # HUMAN MODE CHECK
+                    # =========================================
+                    if sender_id in human_mode_users:
+                        human_mode_started = human_mode_users[sender_id]
+                        elapsed = time.time() - human_mode_started
+
+                        if elapsed < HUMAN_MODE_TIMEOUT:
+                            remaining_minutes = int(
+                                (HUMAN_MODE_TIMEOUT - elapsed) / 60
+                            )
+                            print(
+                                f"[SKIP] {sender_id} ажилтантай "
+                                f"харилцаж байна. Үлдсэн хугацаа: "
+                                f"{remaining_minutes} минут.",
+                                flush=True
+                            )
+                            continue
+
+                        del human_mode_users[sender_id]
+                        print(
+                            f"[HUMAN MODE TIMEOUT] {sender_id} - "
+                            "2 цаг өнгөрсөн. Bot автоматаар сэргэлээ.",
+                            flush=True
+                        )
 
                     # Quick reply
                     if "quick_reply" in message:
-
-                        quick_reply = (
-                            message
-                            .get("quick_reply", {})
-                            or {}
-                        )
+                        quick_reply = message.get("quick_reply", {}) or {}
 
                         raw_payload = (
-                            quick_reply
-                            .get("payload", "")
+                            quick_reply.get("payload", "")
                             .strip()
                         )
 
-                        # Conversation starter / icebreaker
-                        # payload "CS:..." байвал дотоод кодыг
-                        # хэрэглэгчийн текст болгон дамжуулахгүй.
                         visible_text = (
-                            message
-                            .get("text", "")
+                            message.get("text", "")
                             .strip()
                         )
 
-                        if (
-                            raw_payload.startswith("CS:")
-                            and visible_text
-                        ):
+                        if raw_payload.startswith("CS:") and visible_text:
                             user_text = visible_text
                         else:
-                            user_text = (
-                                PAYLOAD_MAP.get(
-                                    raw_payload,
-                                    visible_text or raw_payload
-                                )
+                            user_text = PAYLOAD_MAP.get(
+                                raw_payload,
+                                visible_text or raw_payload
                             )
 
                     # Normal text
                     elif "text" in message:
-
-                        user_text = (
-                            message
-                            .get("text", "")
-                            .strip()
-                        )
+                        user_text = message.get("text", "").strip()
 
                     # Зураг, sticker, like гэх мэт attachment
                     elif "attachments" in message:
-
                         user_text = "сайн уу"
-
 
                 # -----------------------------------------
                 # Postback
                 # -----------------------------------------
-
                 elif postback:
-
                     raw_payload = (
-                        postback
-                        .get(
-                            "payload",
-                            ""
-                        )
+                        postback.get("payload", "")
                         .strip()
                     )
 
                     postback_title = (
-                        postback
-                        .get(
-                            "title",
-                            ""
-                        )
+                        postback.get("title", "")
                         .strip()
                     )
 
-                    if (
-                        raw_payload.startswith("CS:")
-                        and postback_title
-                    ):
+                    if raw_payload.startswith("CS:") and postback_title:
                         user_text = postback_title
-
                     else:
-                        user_text = (
-                            PAYLOAD_MAP.get(
-                                raw_payload,
-                                postback_title or raw_payload
-                            )
+                        user_text = PAYLOAD_MAP.get(
+                            raw_payload,
+                            postback_title or raw_payload
                         )
-
 
                 # -----------------------------------------
                 # Process
                 # -----------------------------------------
-
-                if (
-                    sender_id
-                    and user_text
-                ):
-
+                if sender_id and user_text:
                     background_tasks.add_task(
                         process_ai_response,
                         sender_id,
@@ -2780,20 +2785,17 @@ async def handle_webhook(
         )
 
     except Exception as exc:
-
         print(
             "❌ Webhook processing error:",
             repr(exc)
         )
 
-        # Meta-д 200 буцаах нь webhook retry
-        # үүсэхээс сэргийлнэ.
+        # Meta-д 200 буцаах нь webhook retry үүсэхээс сэргийлнэ.
         return Response(
             content="EVENT_RECEIVED",
             status_code=200
         )
 
-# =========================================================
 # HEALTH CHECK
 # =========================================================
 
