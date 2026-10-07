@@ -2084,6 +2084,64 @@ def send_human_mode_telegram(
             flush=True
         )
         return False
+def send_human_mode_off_telegram(
+    sender_id: str,
+    employee_text: str
+) -> bool:
+    """Ажилтан харилцагчийн хүсэлтийг хүлээн авч чатнаас гарсныг Telegram-д мэдэгдэнэ."""
+
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(
+            "⚠️ Telegram тохиргоо дутуу байна.",
+            flush=True
+        )
+        return False
+
+    user_name = get_messenger_user_name(sender_id)
+
+    telegram_text = (
+        "✅ АЖИЛТАН ЧАТЫГ АМЖИЛТТАЙ ДУУСГАЛАА!\n\n"
+        f"👤 Харилцагч: {user_name}\n"
+        f"🆔 Messenger ID: {sender_id}\n"
+        f"💬 Ажилтны сүүлийн мессеж: {employee_text}\n\n"
+        "✅ Ажилтан харилцагчийн санал, хүсэлтийг хүлээн авч "
+        "чатнаас гарлаа.\n"
+        "🤖 Bot дахин идэвхжлээ."
+    )
+
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot"
+            f"{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": telegram_text
+            },
+            timeout=15
+        )
+
+        if not response.ok:
+            print(
+                "⚠️ Human Mode OFF Telegram API алдаа:",
+                response.status_code,
+                response.text,
+                flush=True
+            )
+            return False
+
+        print(
+            "✅ Human Mode OFF мэдэгдэл Telegram руу илгээгдлээ.",
+            flush=True
+        )
+        return True
+
+    except Exception as exc:
+        print(
+            "⚠️ Human Mode OFF Telegram руу илгээхэд алдаа:",
+            repr(exc),
+            flush=True
+        )
+        return False    
 
 
 def send_barter_telegram(
@@ -2724,7 +2782,11 @@ async def handle_webhook(
                             send_fb_message(
                                 recipient_id,
                                 "Ажилтан чатнаас гарлаа. Танд баярлалаа. 😊\n\n"
-                                "Хэрэв танд дахин мэдээлэл хэрэгтэй бол эндээс асуугаарай."
+                                "Хэрэв танд дахин дэлгэрэнгүй мэдээлэл хэрэгтэй бол би энд байна."
+                            )
+                            send_human_mode_off_telegram(
+                                recipient_id,
+                                message_text
                             )
 
                             print(
