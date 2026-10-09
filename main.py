@@ -2763,39 +2763,45 @@ async def handle_webhook(
                         .lower()
                     )
 
-                    # Page/employee-ээс customer руу явсан Echo event-ийн
-                    # recipient нь тухайн customer-ийн PSID байна.
                     recipient_id = (
                         messaging_event
                         .get("recipient", {})
                         .get("id")
                     )
 
-                    # Ажилтан яриаг дуусгавал Human Mode OFF.
-                    if recipient_id and (
-                        "баяртай" in message_text
-                        or "баярлалаа" in message_text
-                    ):
-                        if recipient_id in human_mode_users:
-                            del human_mode_users[recipient_id]
+                    if recipient_id:
+                        # 1. Ажилтан харилцааг дуусгах үед (Human Mode OFF)
+                        if any(word in message_text for word in ["баяртай", "баярлалаа", "/bot", "бот ажилла"]):
+                            if recipient_id in human_mode_users:
+                                del human_mode_users[recipient_id]
 
-                            send_fb_message(
-                                recipient_id,
-                                "Ажилтан чатнаас гарлаа. Танд баярлалаа. 😊\n\n"
-                                "Хэрэв танд дахин дэлгэрэнгүй мэдээлэл хэрэгтэй бол би энд байна."
-                            )
-                            send_human_mode_off_telegram(
-                                recipient_id,
-                                message_text
-                            )
+                                send_fb_message(
+                                    recipient_id,
+                                    "Ажилтан чатнаас гарлаа. Танд баярлалаа. 😊\n\n"
+                                    "Хэрэв танд дахин дэлгэрэнгүй мэдээлэл хэрэгтэй бол би энд байна."
+                                )
+                                send_human_mode_off_telegram(
+                                    recipient_id,
+                                    message_text
+                                )
 
-                            print(
-                                f"[HUMAN MODE OFF] {recipient_id} - "
-                                f"ажилтан чатнаас гарлаа. Bot дахин аслаа.",
-                                flush=True
-                            )
+                                print(
+                                    f"[HUMAN MODE OFF] {recipient_id} - "
+                                    f"ажилтан чатнаас гарлаа. Bot дахин аслаа.",
+                                    flush=True
+                                )
 
-                    # Echo-г bot AI руу хэзээ ч дамжуулахгүй.
+                        # 2. Ажилтан өөрөө чатад хариулж эхлэх үед (Human Mode ON)
+                        else:
+                            if recipient_id not in human_mode_users:
+                                human_mode_users[recipient_id] = time.time()
+                                print(
+                                    f"[HUMAN MODE ON BY EMPLOYEE] {recipient_id} - "
+                                    f"Ажилтан хариулж эхэлсэн тул Bot түр зогслоо (2 цаг).",
+                                    flush=True
+                                )
+
+                    # Echo ивэншийг Bot AI руу дамжуулахгүй
                     continue
 
                 postback = messaging_event.get("postback")
