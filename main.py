@@ -2751,11 +2751,23 @@ async def handle_webhook(
                     continue
 
                 message = messaging_event.get("message")
-
                 # =========================================
                 # HUMAN MODE - EMPLOYEE ECHO
                 # =========================================
                 if message and message.get("is_echo", False):
+                    # Бот өөрөө API-аар явуулсан мессеж мөн эсэхийг шалгах
+                    # (Та өөрийн Facebook App ID-г энд тавих эсвэл доорх байдлаар шүүж болно)
+                    echo_app_id = str(message.get("app_id", ""))
+                    
+                    # Анхаар: Хэрэв таны ботын App ID энд таараад байвал 
+                    # bot өөрийн мессежийг ялгах боломжтой болно.
+                    # Жишээ нь таны Bot-ын App ID "123456789" бол:
+                    BOT_APP_ID = "ТАНЫ_FACEBOOK_APP_ID" # Энд өөрийн App ID-г бичих
+                    
+                    if echo_app_id == BOT_APP_ID:
+                        # Хэрэв бот өөрөө явуулсан бол Human Mode-ийг асаахгүйгээр шууд алгасна
+                        continue
+
                     message_text = (
                         message
                         .get("text", "")
@@ -2770,7 +2782,7 @@ async def handle_webhook(
                     )
 
                     if recipient_id:
-                        # 1. Ажилтан харилцааг дуусгах үед (Human Mode OFF)
+                        # 1. Ажилтан яриаг дуусгавал Human Mode OFF.
                         if any(word in message_text for word in ["баяртай", "баярлалаа", "/bot", "бот ажилла"]):
                             if recipient_id in human_mode_users:
                                 del human_mode_users[recipient_id]
@@ -2791,7 +2803,7 @@ async def handle_webhook(
                                     flush=True
                                 )
 
-                        # 2. Ажилтан өөрөө чатад хариулж эхлэх үед (Human Mode ON)
+                        # 2. Ажилтан өөрөө Meta Inbox-оос бичиж эхэлбэл Human Mode ON.
                         else:
                             if recipient_id not in human_mode_users:
                                 human_mode_users[recipient_id] = time.time()
@@ -2801,11 +2813,7 @@ async def handle_webhook(
                                     flush=True
                                 )
 
-                    # Echo ивэншийг Bot AI руу дамжуулахгүй
                     continue
-
-                postback = messaging_event.get("postback")
-                user_text = ""
 
                 # -----------------------------------------
                 # CUSTOMER MESSAGE
