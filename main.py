@@ -840,7 +840,7 @@ def direct_faq_router(
     # -----------------------------------------------------
 
     location_keywords = [
-        "байршил", "хаана байдаг", "хаана вэ", "bairshil", "haana", "байршил сургууль", "Bairshil"
+        "байршил", "хаана байдаг", "хаана вэ", "bairshil", "haana", "байршил сургууль", "Bairshil", "байрлал", "Байрлал"
     ]
     if match_any(location_keywords, t):
         reply = (
@@ -2762,7 +2762,7 @@ async def handle_webhook(
                     # Анхаар: Хэрэв таны ботын App ID энд таараад байвал 
                     # bot өөрийн мессежийг ялгах боломжтой болно.
                     # Жишээ нь таны Bot-ын App ID "123456789" бол:
-                    BOT_APP_ID = "ТАНЫ_FACEBOOK_APP_ID" # Энд өөрийн App ID-г бичих
+                    BOT_APP_ID = "1358483676360079" # Энд өөрийн App ID-г бичих
                     
                     if echo_app_id == BOT_APP_ID:
                         # Хэрэв бот өөрөө явуулсан бол Human Mode-ийг асаахгүйгээр шууд алгасна
@@ -2805,11 +2805,18 @@ async def handle_webhook(
 
                         # 2. Ажилтан өөрөө Meta Inbox-оос бичиж эхэлбэл Human Mode ON.
                         else:
-                            if recipient_id not in human_mode_users:
-                                human_mode_users[recipient_id] = time.time()
+                                if recipient_id not in human_mode_users:
+                                   human_mode_users[recipient_id] = time.time()
+
+                                background_tasks.add_task(
+                                    send_human_mode_telegram,
+                                    recipient_id,
+                                    "Ажилтан Page Inbox-оос чат эхлүүлсэн."
+                                )
+
                                 print(
                                     f"[HUMAN MODE ON BY EMPLOYEE] {recipient_id} - "
-                                    f"Ажилтан хариулж эхэлсэн тул Bot түр зогслоо (2 цаг).",
+                                    "Ажилтан хариулж эхэлсэн тул Bot түр зогслоо (2 цаг).",
                                     flush=True
                                 )
 
@@ -2844,28 +2851,42 @@ async def handle_webhook(
                         or "managertei holbogdoh" in message_text
                         or "admin" in message_text
                     ):
-                        human_mode_users[sender_id] = time.time()
-
-                        # Telegram админ чатад ажилтантай холбогдох хүсэлт мэдэгдэнэ.
-                        send_human_mode_telegram(
+                                                notified = send_human_mode_telegram(
                             sender_id,
                             message.get("text", "").strip()
                         )
 
-                        send_fb_message(
-                            sender_id,
-                            "Таныг ажилтанд шилжүүллээ. 👤\n\n"
-                            "Та асуултаа асуун түр хүлээнэ үү. "
-                            "Манай ажилтан удахгүй тантай холбогдоно. 😊"
-                        )
+                    if notified:
+                            human_mode_users[sender_id] = time.time()
 
-                        print(
-                            f"[HUMAN MODE ON] {sender_id} - "
-                            f"Бот зогслоо. Timeout: 2 цаг.",
-                            flush=True
-                        )
+                            send_fb_message(
+                                sender_id,
+                                "Ажилтантай холбогдох хүсэлтийг илгээлээ. 👤\n\n"
+                                "Та асуултаа бичиж үлдээнэ үү. "
+                                "Манай ажилтан тантай холбогдоно. 😊"
+                            )
 
-                        continue
+                            print(
+                                f"[HUMAN MODE ON] {sender_id} - "
+                                "Telegram мэдэгдэл хүрсэн. Бот түр зогслоо.",
+                                flush=True
+                            )
+                    else:
+                            send_fb_message(
+                                sender_id,
+                                "Ажилтанд мэдэгдэл илгээж чадсангүй. "
+                                f"Та {SALES_PHONE} дугаарт холбогдоно уу.\n\n"
+                                "Мэдээлэл авах асуултаа энд үргэлжлүүлэн "
+                                "бичиж болно."
+                            )
+
+                            print(
+                                f"[HUMAN MODE NOT STARTED] {sender_id} - "
+                                "Telegram мэдэгдэл хүрээгүй.",
+                                flush=True
+                            )
+
+                    continue
 
                     # =========================================
                     # HUMAN MODE CHECK
