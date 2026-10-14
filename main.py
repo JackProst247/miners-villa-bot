@@ -2751,6 +2751,9 @@ async def handle_webhook(
                     continue
 
                 message = messaging_event.get("message")
+                message = messaging_event.get("message")
+                postback = messaging_event.get("postback")
+                user_text = ""
                 # =========================================
                 # HUMAN MODE - EMPLOYEE ECHO
                 # =========================================
