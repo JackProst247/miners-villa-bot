@@ -2750,7 +2750,7 @@ async def handle_webhook(
                 if not sender_id:
                     continue
 
-                message = messaging_event.get("message")
+               
                 message = messaging_event.get("message")
                 postback = messaging_event.get("postback")
                 user_text = ""
@@ -2808,8 +2808,8 @@ async def handle_webhook(
 
                         # 2. Ажилтан өөрөө Meta Inbox-оос бичиж эхэлбэл Human Mode ON.
                         else:
-                                if recipient_id not in human_mode_users:
-                                   human_mode_users[recipient_id] = time.time()
+                            if recipient_id not in human_mode_users:
+                                human_mode_users[recipient_id] = time.time()
 
                                 background_tasks.add_task(
                                     send_human_mode_telegram,
@@ -2819,7 +2819,7 @@ async def handle_webhook(
 
                                 print(
                                     f"[HUMAN MODE ON BY EMPLOYEE] {recipient_id} - "
-                                    "Ажилтан хариулж эхэлсэн тул Bot түр зогслоо (2 цаг).",
+                                    "Ажилтан хариулж эхэлсэн тул Bot түр зогслоо.",
                                     flush=True
                                 )
 
@@ -2854,12 +2854,12 @@ async def handle_webhook(
                         or "managertei holbogdoh" in message_text
                         or "admin" in message_text
                     ):
-                                                notified = send_human_mode_telegram(
+                        notified = send_human_mode_telegram(
                             sender_id,
                             message.get("text", "").strip()
                         )
 
-                    if notified:
+                        if notified:
                             human_mode_users[sender_id] = time.time()
 
                             send_fb_message(
@@ -2874,7 +2874,7 @@ async def handle_webhook(
                                 "Telegram мэдэгдэл хүрсэн. Бот түр зогслоо.",
                                 flush=True
                             )
-                    else:
+                        else:
                             send_fb_message(
                                 sender_id,
                                 "Ажилтанд мэдэгдэл илгээж чадсангүй. "
@@ -2889,37 +2889,9 @@ async def handle_webhook(
                                 flush=True
                             )
 
-                    continue
+                        continue
 
-                    # =========================================
-                    # HUMAN MODE CHECK
-                    # =========================================
-                    if sender_id in human_mode_users:
-                        human_mode_started = human_mode_users[sender_id]
-                        elapsed = time.time() - human_mode_started
-
-                        # 2 цаг болоогүй бол bot хариу өгөхгүй.
-                        if elapsed < HUMAN_MODE_TIMEOUT:
-                            remaining_minutes = int(
-                                (HUMAN_MODE_TIMEOUT - elapsed) / 60
-                            )
-
-                            print(
-                                f"[SKIP] {sender_id} ажилтантай харилцаж байна. "
-                                f"Үлдсэн хугацаа: {remaining_minutes} минут.",
-                                flush=True
-                            )
-
-                            continue
-
-                        # 2 цаг болсон бол bot автоматаар сэргэнэ.
-                        del human_mode_users[sender_id]
-
-                        print(
-                            f"[HUMAN MODE TIMEOUT] {sender_id} - "
-                            f"2 цаг өнгөрсөн. Bot автоматаар сэргэлээ.",
-                            flush=True
-                        )
+                        
 
                     # Quick reply
                     if "quick_reply" in message:
@@ -3007,10 +2979,8 @@ async def handle_webhook(
         )
 
     except Exception as exc:
-        print(
-            "❌ Webhook processing error:",
-            repr(exc)
-        )
+        import traceback
+        traceback.print_exc()
 
         # Meta-д 200 буцаах нь webhook retry үүсэхээс сэргийлнэ.
         return Response(
