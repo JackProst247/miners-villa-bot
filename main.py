@@ -217,6 +217,39 @@ def ingest(data):
                     with store.db() as c:
                         c.execute('INSERT INTO bot_v3.requests(id,sid,kind,data) VALUES(%s,%s,\'human\',%s::jsonb) ON CONFLICT DO NOTHING',(rid,recipient,json.dumps(form,ensure_ascii=False)))
                     store.enqueue('notify:'+rid,'notify',recipient,{'request_id':rid,'ack':False})
+                    resume_text = norm(m.get('text', ''))
+
+                    resume = (
+                        resume_text in ('/bot', 'бот ажилла')
+                        or any(word in resume_text for word in ('баярлалаа', 'баяртай'))
+                    )
+
+                    c.execute(
+                        'UPDATE bot_v3.people SET paused=%s,epoch=epoch+1,form=\'{}\' WHERE sid=%s',
+                        (not resume, recipient)
+                    )
+                    if resume:
+                        c.execute(
+                            'UPDATE bot_v3.requests SET completed=true,taken=false WHERE sid=%s',
+                            (recipient,)
+                        )
+
+                # Бот дахин асах үед хэрэглэгчид мэдэгдэнэ
+                if resume and before['paused']:
+                    current = store.state(recipient)
+                    say(
+                        recipient,
+                        'Ажилтан чатнаас гарлаа. Танд нэмэлт мэдээлэл хэрэгтэй бол цахим туслах Мина миний бие бэлэн байна. 😊',
+                        current['epoch']
+                    )
+
+                if not resume and not before['paused']:
+                    form = {
+                        'kind': 'human',
+                        'details': 'Ажилтан Page Inbox-оос чат эхлүүлсэн.',
+                        'fields': {}
+                    }
+                    rid = hashlib.sha256(event_id.encode()).hexdigest()[:20]
                 continue
             post = event.get('postback') or {}
             raw=(m.get('quick_reply') or {}).get('payload') or post.get('payload')
