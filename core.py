@@ -40,6 +40,7 @@ def classify(text):
     return 'general'
 
 def tags(text):
+    text=re.sub(r'\b(?:mulit|multi)\b','mult',text,flags=re.I)
     interests = []
     if has(text, ['мульт', 'mult', 'мулт']): interests.append('mult')
     if has(text, ['таун', 'town', 'taun']): interests.append('town')
@@ -63,6 +64,9 @@ def collect(form, text):
     form = dict(form)
     fields = dict(form.get('fields', {}))
     step = form.get('step')
+    # Facebook may deliver the same shared phone as a second distinct message.
+    if step and step!='phone' and phone_value(text) and phone_value(text)==fields.get('phone'):
+        return form, QUESTIONS.get(step,'Мэдээллээ үргэлжлүүлэн бичээрэй.')
     if step:
         value = text.strip()
         if step == 'email':
