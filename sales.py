@@ -591,7 +591,7 @@ def direct_faq_router(
     ]
     if match_any(price_keywords, t):
         reply = (
-            f"💰 Бүртгэлд байгаа м² үнэ {PRICE_MIN:,}–{PRICE_MAX:,} ₮ байна.\n\n"
+            f"💰 Манай хаусны м² үнэ {PRICE_MIN:,}–{PRICE_MAX:,} ₮ байна.\n\n"
             "✨ Мөн манай хаус бүр хувийн террастай бөгөөд "
             "террасны талбайн м²-ийн үнийг ердөө 30%-иар тооцно! Энэ нь хувийн орон зайгаа "
             "боломжийн үнээр авах таатай боломж юм.\n\n"
@@ -1351,7 +1351,7 @@ def send_images_by_keys(
                 repr(exc)
             )
 
-        time.sleep(0.4)
+        time.sleep(0.05)
 
     return success
 
@@ -1435,7 +1435,7 @@ def direct_area_price_router(
         total = area * price_per_m2
 
         reply = (
-            f"🏢 {area:,.2f} м² Мульт хаусыг бүртгэлд байгаа м² үнээр "
+            f"🏢 {area:,.2f} м² Мульт хаусыг манай м² үнээр "
             f"ойролцоогоор {total:,.0f} ₮ гэж тооцно.\n\n"
             f"М² үнэ: {price_per_m2:,.0f} ₮. "
             "Эцсийн үнэ нь тухайн сонголтын нөхцөлөөс шалтгаалж баталгаажна."
@@ -1459,7 +1459,7 @@ def direct_area_price_router(
         reply = (
             f"🏡 {area:,.2f} м² Таун хаус нь одоогийн м² үнийн хүрээгээр "
             f"ойролцоогоор {min_total:,.0f}–{max_total:,.0f} ₮ байна.\n\n"
-            f"Бүртгэлд байгаа м² үнэ {PRICE_MIN:,.0f}–{PRICE_MAX:,.0f} ₮. "
+            f"Манай хаусны м² үнэ {PRICE_MIN:,.0f}–{PRICE_MAX:,.0f} ₮. "
             f"Эцсийн үнийг борлуулалтын менежер баталгаажуулна."
         )
         return (reply, False, MODEL_BUTTONS)
@@ -1471,7 +1471,7 @@ def direct_area_price_router(
     reply = (
         f"🏠 {area:,.2f} м² талбайг одоогийн м² үнийн хүрээгээр "
         f"ойролцоогоор {min_total:,.0f}–{max_total:,.0f} ₮ гэж тооцож болно.\n\n"
-        f"Бүртгэлд байгаа м² үнэ {PRICE_MIN:,.0f}–{PRICE_MAX:,.0f} ₮."
+        f"Манай хаусны м² үнэ {PRICE_MIN:,.0f}–{PRICE_MAX:,.0f} ₮."
     )
     return (reply, False, MODEL_BUTTONS)
 

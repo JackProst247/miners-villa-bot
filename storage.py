@@ -17,12 +17,14 @@ def initialize():
 
 def state(sid):
     with db() as c:
+        existing=c.execute('SELECT * FROM bot_v3.people WHERE sid=%s',(sid,)).fetchone()
+        if existing: return existing
         c.execute('INSERT INTO bot_v3.people(sid) VALUES (%s) ON CONFLICT DO NOTHING', (sid,))
         return c.execute('SELECT * FROM bot_v3.people WHERE sid=%s', (sid,)).fetchone()
 
 def save(sid, form=None, paused=None, customer=None, expected_epoch=None, profile=None):
-    state(sid)
     with db() as c:
+        c.execute('INSERT INTO bot_v3.people(sid) VALUES (%s) ON CONFLICT DO NOTHING',(sid,))
         current=c.execute('SELECT epoch,paused FROM bot_v3.people WHERE sid=%s FOR UPDATE',(sid,)).fetchone()
         if expected_epoch is not None and (current['epoch']!=expected_epoch or current['paused']): return False
         if form is not None:

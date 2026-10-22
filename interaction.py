@@ -49,16 +49,16 @@ def route(text,profile=None):
     if price_question:
         result=sales.direct_area_price_router(t)
         if not result: result=sales.direct_faq_router('үнэ')
-        return {'reply':result[0]+'\nЭцсийн үнэ болон тухайн байрны үлдэгдлийг ажилтнаар баталгаажуулна.', 'action':'text','buttons':result[2] or buttons}
+        return {'reply':result[0], 'action':'text','buttons':result[2] or buttons}
     if has(t,['дулаанаа','дулаан ав','дулаан ир','шатанда','шатандаа','блокийн явц','block','дотор засал']):
-        return {'reply':'Бүртгэлд байгаа төлөвлөгөөгөөр 2026 оны өвөл дотоод заслын ажлыг эхлүүлэхээр ажиллаж байгаа. Тухайн блокийн дулаан болон ажлын бодит явцыг ажилтнаар тодруулна. Хүсвэл «ажилтантай холбогдох» сонголтыг дараарай.', 'action':'text','buttons':CUSTOMER_BUTTONS}
+        return {'reply':'Манай төслийн төлөвлөгөөний дагуу 2026 оны өвөл дотоод заслын ажлыг эхлүүлэхээр ажиллаж байгаа. Тухайн блокийн дулаан болон ажлын бодит явцыг ажилтнаар тодруулна. Хүсвэл «ажилтантай холбогдох» сонголтыг дараарай.', 'action':'text','buttons':CUSTOMER_BUTTONS}
     if has(t,['төлбөрийн үлдэгдэл','миний төлбөр','гэрээний үлдэгдэл']):
         return {'reply':'Таны гэрээний төлбөрийн үлдэгдлийг ажилтан бүртгэлтэй тулгаж шалгана. «Ажилтантай ярих» сонголтоор хүсэлтээ дамжуулаарай.', 'action':'text','buttons':CUSTOMER_BUTTONS}
     if interest and (size_question or has(t,['мульт','мулт','таун','town','taun','зураг','план'])):
         label='Мульт' if interest=='mult' else 'Таун'
         sizes=MULT_SIZES if interest=='mult' else TOWN_SIZES
         keys=sales.direct_image_router(t if any(x.isdigit() for x in t) else ('мульт' if interest=='mult' else 'таун')) or []
-        return {'reply':f'{label} хаусны зурагт бүртгэлтэй талбайнууд: {sizes} м². Доорх зургаас сонгон үзэж болно. Энэ жагсаалт нь борлуулагдаагүй байрны үлдэгдэл биш; та аль талбайг сонирхож байна вэ?',
+        return {'reply':f'Манай {label.lower()} хаусны талбайн сонголтууд: {sizes} м².\n\nТа доорх зургаас сонирхож буй талбайгаа сонгоорой. Тухайн талбайтай байрны үлдэгдлийг манай ажилтантай холбогдож тодруулах эсвэл {sales.SALES_PHONE} дугаараар дэлгэрэнгүй мэдээлэл аваарай.',
                 'action':'images','images':keys,'buttons':sales.MODEL_BUTTONS,'interest':interest,'customer':'prospect'}
     if size_question and not interest:
         return {'reply':f'Таун хаус: {TOWN_SIZES} м². Мульт хаусны талбайн зургуудыг «Мульт хаус» сонголтоос үзээрэй.', 'action':'models','buttons':sales.MODEL_BUTTONS}
