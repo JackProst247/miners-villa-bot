@@ -3,11 +3,29 @@ import json
 from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
+
+_pool = None
+
+def open_pool():
+    global _pool
+    if _pool is None:
+        _pool = ConnectionPool(os.environ['DATABASE_URL'], min_size=4, max_size=8,
+            kwargs={'connect_timeout':10, 'row_factory':dict_row, 'prepare_threshold':None},
+            timeout=10, open=False)
+        _pool.open(wait=True, timeout=30)
+
+def close_pool():
+    global _pool
+    if _pool is not None:
+        _pool.close()
+        _pool = None
 
 @contextmanager
 def db():
-    with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=10,
-                         row_factory=dict_row) as connection:
+    if _pool is None:
+        raise RuntimeError('Database pool is not started')
+    with _pool.connection() as connection:
         yield connection
 
 def initialize():

@@ -222,6 +222,26 @@ def send_images(sid,text,epoch):
         if file:
             send_message(sid,{'attachment':{'type':'image','payload':{'url':os.getenv('PUBLIC_BASE_URL','').rstrip('/')+'/photo/'+quote(file.name),'is_reusable':True}}},epoch)
 
+def enqueue_resume(c,sid,epoch,event_key):
+    for kind in ('resume_fb','resume_tg'):
+        c.execute("INSERT INTO bot_v3.jobs(key,kind,sid,payload) VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT DO NOTHING",
+                  (kind+':'+event_key,kind,sid,json.dumps({'epoch':epoch})))
+
+
+def send_resume(kind,sid,payload):
+    current=store.state(sid)
+    if current['paused'] or current['epoch']!=payload['epoch']:
+        return  # Staff may have re-entered since this notification was queued.
+    if kind=='resume_fb':
+        if not say(sid,'Ажилтан чатнаас гарлаа. Цахим туслах Мина үргэлжлүүлэн туслахад бэлэн байна. 😊',payload['epoch']):
+            latest=store.state(sid)
+            if not latest['paused'] and latest['epoch']==payload['epoch']:
+                raise RuntimeError('Resume message delivery failed')
+    else:
+        telegram('sendMessage',{'chat_id':env('TELEGRAM_CHAT_ID'),
+            'text':f'✅ Ажилтантай хийсэн яриа дууслаа. Бот дахин аслаа.\nMessenger ID: {sid}'})
+
+
 def ingest(data):
     if data.get('object')!='page': return
     for entry in data.get('entry',[]):
@@ -241,54 +261,20 @@ def ingest(data):
                     if not inserted: continue
                     before=c.execute('SELECT paused FROM bot_v3.people WHERE sid=%s FOR UPDATE',(recipient,)).fetchone()
                     
-                    resume_text = norm(m.get('text', ''))
-
-                    resume = (
-                        resume_text in ('/bot', 'бот ажилла')
-                        or any(word in resume_text for word in ('баярлалаа', 'баяртай'))
-)
-
-                    c.execute('UPDATE bot_v3.people SET paused=%s,epoch=epoch+1,form=\'{}\' WHERE sid=%s',(not resume,recipient))
-                    if resume: c.execute('UPDATE bot_v3.requests SET completed=true,taken=false WHERE sid=%s',(recipient,))
+                    resume_text = norm(m.get('text',''))
+                    resume = (resume_text in ('/bot','бот ажилла')
+                              or any(word in resume_text for word in ('баярлалаа','баяртай')))
+                    current=c.execute("UPDATE bot_v3.people SET paused=%s,epoch=epoch+1,form='{}' WHERE sid=%s RETURNING epoch",(not resume,recipient)).fetchone()
+                    if resume:
+                        c.execute('UPDATE bot_v3.requests SET completed=true,taken=false WHERE sid=%s',(recipient,))
+                        if before['paused']:
+                            enqueue_resume(c,recipient,current['epoch'],event_id)
                 if not resume and not before['paused']:
                     form={'kind':'human','details':'Ажилтан Page Inbox-оос чат эхлүүлсэн.','fields':{}}
                     rid=hashlib.sha256(event_id.encode()).hexdigest()[:20]
                     with store.db() as c:
-                        c.execute('INSERT INTO bot_v3.requests(id,sid,kind,data) VALUES(%s,%s,\'human\',%s::jsonb) ON CONFLICT DO NOTHING',(rid,recipient,json.dumps(form,ensure_ascii=False)))
+                        c.execute("INSERT INTO bot_v3.requests(id,sid,kind,data) VALUES(%s,%s,'human',%s::jsonb) ON CONFLICT DO NOTHING",(rid,recipient,json.dumps(form,ensure_ascii=False)))
                     store.enqueue('notify:'+rid,'notify',recipient,{'request_id':rid,'ack':False})
-                    resume_text = norm(m.get('text', ''))
-
-                    resume = (
-                        resume_text in ('/bot', 'бот ажилла')
-                        or any(word in resume_text for word in ('баярлалаа', 'баяртай'))
-                    )
-
-                    c.execute(
-                        'UPDATE bot_v3.people SET paused=%s,epoch=epoch+1,form=\'{}\' WHERE sid=%s',
-                        (not resume, recipient)
-                    )
-                    if resume:
-                        c.execute(
-                            'UPDATE bot_v3.requests SET completed=true,taken=false WHERE sid=%s',
-                            (recipient,)
-                        )
-
-                # Бот дахин асах үед хэрэглэгчид мэдэгдэнэ
-                if resume and before['paused']:
-                    current = store.state(recipient)
-                    say(
-                        recipient,
-                        'Ажилтан чатнаас гарлаа. Танд нэмэлт мэдээлэл хэрэгтэй бол цахим туслах Мина миний бие бэлэн байна. 😊',
-                        current['epoch']
-                    )
-
-                if not resume and not before['paused']:
-                    form = {
-                        'kind': 'human',
-                        'details': 'Ажилтан Page Inbox-оос чат эхлүүлсэн.',
-                        'fields': {}
-                    }
-                    rid = hashlib.sha256(event_id.encode()).hexdigest()[:20]
                 continue
             post = event.get('postback') or {}
             raw=(m.get('quick_reply') or {}).get('payload') or post.get('payload')
@@ -299,13 +285,11 @@ def ingest(data):
             interests,customer=tags(text)
             if s['customer']=='existing': customer='existing'
             with store.db() as c:
-                inserted=c.execute('INSERT INTO bot_v3.jobs(key,kind,sid,payload) VALUES(%s,\'customer\',%s,%s::jsonb) ON CONFLICT DO NOTHING RETURNING key',
-                   (key,sid,json.dumps({'text':text[:4000],'epoch':s['epoch'],'fast':bool(s['paused'] or s['form'] or interaction.explicit_request(text) or interaction.route(text,s.get('profile',{})))},ensure_ascii=False))).fetchone()
+                inserted=c.execute('INSERT INTO bot_v3.jobs(key,kind,sid,payload) VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT DO NOTHING RETURNING key',
+                   (key,'forward' if s['paused'] else 'customer',sid,json.dumps({'text':text[:4000],'epoch':s['epoch'],'fast':bool(s['paused'] or s['form'] or interaction.explicit_request(text) or interaction.route(text,s.get('profile',{})))},ensure_ascii=False))).fetchone()
                 if not inserted: continue
                 c.execute('INSERT INTO bot_v3.messages(sid,text,interests,customer) VALUES(%s,%s,%s::jsonb,%s)',(sid,text[:4000],json.dumps(interests),customer))
                 if customer!='unknown': c.execute('UPDATE bot_v3.people SET customer=%s WHERE sid=%s',(customer,sid))
-            if s['paused']:
-                store.enqueue('forward:'+key,'forward',sid,{'text':text[:3000]})
 
 def report(end):
     start=end-timedelta(days=1)
@@ -370,6 +354,7 @@ def tick(fast_only=False):
                 p,sid=job['payload'],job['sid']
                 if job['kind']=='customer': process_customer(job['key'],sid,p)
                 elif job['kind']=='notify': notify(p,sid)
+                elif job['kind'] in ('resume_fb','resume_tg'): send_resume(job['kind'],sid,p)
                 elif job['kind']=='forward': telegram('sendMessage',{'chat_id':env('TELEGRAM_CHAT_ID'),'text':f'💬 Ажилтанд шилжсэн чат\nMessenger ID: {sid}\n{p["text"]}'})
                 elif job['kind']=='report':
                     report(datetime.fromisoformat(p['end']))
@@ -406,7 +391,8 @@ async def lifespan(app):
               'TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','TELEGRAM_ADMIN_IDS','TELEGRAM_WEBHOOK_SECRET']
     missing=[k for k in required if not os.getenv(k)]
     if missing: raise RuntimeError('Missing configuration: '+', '.join(missing))
-    store.initialize()
+    await asyncio.to_thread(store.open_pool)
+    await asyncio.to_thread(store.initialize)
     STOP.clear()
     threads=[threading.Thread(target=worker,kwargs={'fast_only':True,'scheduler':True},daemon=True),
              threading.Thread(target=worker,daemon=True)]
@@ -414,11 +400,12 @@ async def lifespan(app):
     yield
     STOP.set()
     await asyncio.gather(*(asyncio.to_thread(thread.join,30) for thread in threads))
+    await asyncio.to_thread(store.close_pool)
 
 app=FastAPI(title='Miners Villa sales assistant',lifespan=lifespan)
 
 @app.api_route('/',methods=['GET','HEAD'])
-def root(): return {'ok':True,'version':'3.2-fast-menus'}
+def root(): return {'ok':True,'version':'3.3-pooled-resume'}
 
 @app.get('/health')
 def health():
@@ -488,7 +475,9 @@ def handle_telegram(data):
             if not item['completed']:
                 c.execute('UPDATE bot_v3.requests SET completed=%s,taken=%s WHERE id=%s',(action=='done',action=='take',rid))
                 other=c.execute('SELECT count(*) AS n FROM bot_v3.requests WHERE sid=%s AND taken AND NOT completed',(item['sid'],)).fetchone()['n']
-                c.execute('UPDATE bot_v3.people SET paused=%s,epoch=epoch+1,form=\'{}\' WHERE sid=%s',(bool(other),item['sid']))
+                current=c.execute("UPDATE bot_v3.people SET paused=%s,epoch=epoch+1,form='{}' WHERE sid=%s RETURNING epoch",(bool(other),item['sid'])).fetchone()
+                if action=='done' and not other:
+                    enqueue_resume(c,item['sid'],current['epoch'],key)
     paused=store.state(item['sid'])['paused']
     answer('Хүсэлтийг хүлээн авлаа. Энэ харилцагчид бот хариулахгүй.' if action=='take' else ('Хүсэлт дууслаа. Өөр нээлттэй хүсэлт байгаа тул бот түр зогссон хэвээр.' if paused else 'Хүсэлт дууслаа. Бот аслаа.'))
 

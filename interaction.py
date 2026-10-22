@@ -36,6 +36,8 @@ def route(text,profile=None):
     profile=profile or {}
     t=clean(text)
     buttons=DEFAULT_BUTTONS
+    if t in {'за','заа','зааа','ок','ok','okay','баярлалаа','thanks','ойлголоо'}:
+        return {'reply':'Өөр мэдээлэл хэрэгтэй бол доорх сонголтоос сонгоорой. 😊','action':'text','buttons':buttons}
     if t in {'сайн уу','сайн байна уу','hello','hi','snu','сну','мэнд','эхлэх','үндсэн цэс','start'}:
         return {'reply':'Сайн байна уу! 😊 Miners Villa-д тавтай морил. Доорх сонголтоос загвар, үнэ болон төслийн мэдээлэлтэй танилцаарай.', 'action':'menu','buttons':buttons}
     if not explicit_request(t) and has(t,['захиалагч байна','захиалагч бна','захиалсан байртай','гэрээтэй','танай захиалагч']):
