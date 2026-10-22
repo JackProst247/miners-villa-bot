@@ -201,7 +201,14 @@ def ingest(data):
                     inserted = c.execute('INSERT INTO bot_v3.jobs(key,kind,sid,payload,status) VALUES(%s,\'echo\',%s,\'{}\',\'done\') ON CONFLICT DO NOTHING RETURNING key',(event_id,recipient)).fetchone()
                     if not inserted: continue
                     before=c.execute('SELECT paused FROM bot_v3.people WHERE sid=%s FOR UPDATE',(recipient,)).fetchone()
-                    resume = norm(m.get('text','')) in ('/bot','бот ажилла')
+                    
+                    resume_text = norm(m.get('text', ''))
+
+                    resume = (
+                        resume_text in ('/bot', 'бот ажилла')
+                        or any(word in resume_text for word in ('баярлалаа', 'баяртай'))
+)
+
                     c.execute('UPDATE bot_v3.people SET paused=%s,epoch=epoch+1,form=\'{}\' WHERE sid=%s',(not resume,recipient))
                     if resume: c.execute('UPDATE bot_v3.requests SET completed=true,taken=false WHERE sid=%s',(recipient,))
                 if not resume and not before['paused']:
